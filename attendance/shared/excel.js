@@ -228,25 +228,27 @@ const Excel = {
         };
 
       case 'leave':
+        const leaveStart = this._formatDate(clean['开始日期']);
+        const leaveEnd = this._formatDate(clean['结束日期']);
         return {
           applicant: clean['申请人'] || '',
           department: clean['申请部门'] || '',
           leaveType: clean['请假类型'] || '',
-          startDate: this._formatDate(clean['开始日期']),
-          endDate: this._formatDate(clean['结束日期']),
+          startDate: leaveStart,
+          endDate: leaveEnd || leaveStart,
           leaveDays: parseFloat(clean['请假天数']) || 0,
           leaveHours: parseFloat(clean['小时']) || 0,
           reason: clean['请假事由'] || ''
         };
 
       case 'overtime':
-        const otTime = clean['加班起止时间小时'] || clean['加班起止时间'] || '';
+        const otHours = clean['小时'] || '';
         return {
           applicant: clean['申请人'] || '',
           department: clean['申请部门'] || '',
           startTime: '',
           endTime: '',
-          overtimeHours: parseFloat(otTime) || 0,
+          overtimeHours: parseFloat(otHours) || 0,
           content: clean['加班内容'] || ''
         };
 

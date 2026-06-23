@@ -48,10 +48,6 @@ const RulesEngine = {
   },
 
   _isWorkDay(schedulesData, holidaysData, dateStr) {
-    if (!schedulesData) return false;
-
-    const parts = dateStr.split('-');
-    const day = String(parseInt(parts[2])).padStart(2, '0');
     const fullDate = dateStr;
 
     const holiday = holidaysData.find(h => h.date === fullDate);
@@ -60,6 +56,10 @@ const RulesEngine = {
       if (holiday.isHoliday) return false;
     }
 
+    if (!schedulesData) return true;
+
+    const parts = dateStr.split('-');
+    const day = String(parseInt(parts[2])).padStart(2, '0');
     return schedulesData.workDays[day] === true;
   },
 
@@ -95,7 +95,12 @@ const RulesEngine = {
         .equals([employeeNo, targetYear, targetMonthNum])
         .first();
 
-      const schedulesData = scheduleEntry || null;
+      let schedulesData = scheduleEntry || null;
+
+      if (!schedulesData) {
+        const allSchedules = await Store.getByIndex('schedules', 'year', targetYear);
+        schedulesData = allSchedules.find(s => s.month === targetMonthNum) || null;
+      }
       const lateRecords = [];
 
       const punchByDate = {};
