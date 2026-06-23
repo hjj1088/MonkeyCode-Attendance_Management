@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>考勤管理系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .module-card { transition: all 0.2s ease; }
+    .module-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="app">
+    <div v-if="!loggedIn" class="flex items-center justify-center min-h-screen">
+      <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">考勤管理系统</h1>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">账号</label>
+          <input v-model="username" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="请输入账号">
+        </div>
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+          <input v-model="password" type="password" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="请输入密码" @keyup.enter="doLogin">
+        </div>
+        <div v-if="errorMsg" class="mb-4 p-2 bg-red-100 text-red-700 rounded text-sm">{{ errorMsg }}</div>
+        <button @click="doLogin" class="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition">登录</button>
+        <p class="text-xs text-gray-400 text-center mt-4">默认账号: admin / admin123</p>
+      </div>
+    </div>
+
+    <div v-else class="max-w-4xl mx-auto px-4 py-12">
+      <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-800">考勤管理系统</h1>
+        <button @click="doLogout" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition">退出登录</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <a href="import.html" class="module-card block bg-white rounded-lg shadow p-6 hover:shadow-lg">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-lg flex items-center justify-center text-2xl bg-blue-100">&#128193;</div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-800">数据导入</h3>
+              <p class="text-sm text-gray-500 mt-1">拖拽上传Excel文件，自动识别并导入考勤数据</p>
+            </div>
+          </div>
+        </a>
+        <a href="attendance.html" class="module-card block bg-white rounded-lg shadow p-6 hover:shadow-lg">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-lg flex items-center justify-center text-2xl bg-green-100">&#128197;</div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-800">考勤计算</h3>
+              <p class="text-sm text-gray-500 mt-1">运行规则引擎，列表/日历视图查询考勤结果</p>
+            </div>
+          </div>
+        </a>
+        <a href="export.html" class="module-card block bg-white rounded-lg shadow p-6 hover:shadow-lg">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-lg flex items-center justify-center text-2xl bg-purple-100">&#128228;</div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-800">导出中心</h3>
+              <p class="text-sm text-gray-500 mt-1">设计导出模板，预览并导出考勤凭证</p>
+            </div>
+          </div>
+        </a>
+        <a href="settings.html" class="module-card block bg-white rounded-lg shadow p-6 hover:shadow-lg">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-lg flex items-center justify-center text-2xl bg-gray-100">&#9881;</div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-800">系统设置</h3>
+              <p class="text-sm text-gray-500 mt-1">配置考勤规则、容错参数、公司假期</p>
+            </div>
+          </div>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script src="./lib/vue.global.prod.js?v=1.0.0"></script>
+  <script src="./shared/auth.js?v=1.0.0"></script>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          loggedIn: Auth.isLoggedIn(),
+          username: 'admin',
+          password: '',
+          errorMsg: ''
+        };
+      },
+      methods: {
+        doLogin() {
+          const result = Auth.login(this.username, this.password);
+          if (result.success) {
+            this.loggedIn = true;
+            this.errorMsg = '';
+          } else {
+            this.errorMsg = result.message;
+          }
+        },
+        doLogout() {
+          Auth.logout();
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

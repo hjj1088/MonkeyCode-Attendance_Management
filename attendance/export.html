@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>导出中心 - 考勤管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="app" class="max-w-6xl mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+      <div class="flex items-center gap-3">
+        <a href="index.html" class="text-blue-600 hover:underline">&larr; 返回</a>
+        <h1 class="text-2xl font-bold text-gray-800">导出中心</h1>
+      </div>
+    </div>
+
+    <div class="flex gap-6">
+      <div class="w-48 flex-shrink-0">
+        <div class="bg-white rounded-lg shadow p-4">
+          <h3 class="font-semibold text-gray-700 mb-3">模板列表</h3>
+          <div class="space-y-1">
+            <div v-for="t in templates" :key="t.id" @click="selectTemplate(t)" class="p-2 rounded text-sm cursor-pointer transition" :class="selectedTemplate && selectedTemplate.id === t.id ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'">
+              {{ t.name }}
+            </div>
+          </div>
+          <button @click="saveAsTemplate" class="w-full mt-3 px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition">另存为模板</button>
+        </div>
+      </div>
+
+      <div class="flex-1">
+        <div class="bg-white rounded-lg shadow p-4">
+          <h3 class="font-semibold text-gray-700 mb-3">模板字段编辑</h3>
+          <div class="space-y-2">
+            <div v-for="(field, idx) in editingFields" :key="idx" class="flex items-center gap-2">
+              <input v-model="field.label" class="px-2 py-1 border rounded text-sm w-32" placeholder="列名">
+              <select v-model="field.field" class="px-2 py-1 border rounded text-sm flex-1">
+                <option v-for="col in availableColumns" :key="col.field" :value="col.field">{{ col.label }}</option>
+              </select>
+              <button @click="removeField(idx)" class="text-red-500 text-sm">删除</button>
+            </div>
+          </div>
+          <button @click="addField" class="mt-3 px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 transition">添加字段</button>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-4 mt-4">
+          <h3 class="font-semibold text-gray-700 mb-3">导出设置</h3>
+          <div class="flex gap-3 items-center">
+            <select v-model="exportMonth" class="px-3 py-1 border rounded text-sm">
+              <option value="">导出: 全部月份</option>
+              <option v-for="m in availableMonths" :key="m" :value="m">{{ m }}</option>
+            </select>
+            <button @click="doExport" class="px-4 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition">导出 Excel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="w-96 flex-shrink-0">
+        <div class="bg-white rounded-lg shadow p-4">
+          <h3 class="font-semibold text-gray-700 mb-3">实时预览 (前5条)</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border">
+              <thead>
+                <tr class="bg-gray-100">
+                  <th v-for="f in editingFields" :key="f.field" class="p-1 border text-left whitespace-nowrap">{{ f.label }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, ri) in previewData" :key="ri">
+                  <td v-for="f in editingFields" :key="f.field" class="p-1 border whitespace-nowrap">
+                    {{ f.field === '_index' ? ri + 1 : (row[f.field] !== undefined ? row[f.field] : '') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="previewData.length === 0" class="text-gray-400 text-sm text-center py-4">暂无数据预览</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./lib/vue.global.prod.js?v=1.0.0"></script>
+  <script src="./lib/dexie.min.js?v=1.0.0"></script>
+  <script src="./lib/xlsx.full.min.js?v=1.0.0"></script>
+  <script src="./shared/auth.js?v=1.0.0"></script>
+  <script src="./shared/db.js?v=1.0.0"></script>
+  <script src="./shared/excel.js?v=1.0.0"></script>
+  <script>
+    Auth.requireAuth();
+
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          templates: [],
+          selectedTemplate: null,
+          editingFields: [],
+          previewData: [],
+          exportMonth: '',
+          availableMonths: [],
+          availableColumns: [
+            { label: '序号(自动)', field: '_index' },
+            { label: '考勤号码', field: 'employeeNo' },
+            { label: '姓名', field: 'name' },
+            { label: '部门', field: 'department' },
+            { label: '日期', field: 'date' },
+            { label: '对应时段', field: 'period' },
+            { label: '上班时间', field: 'scheduleStart' },
+            { label: '下班时间', field: 'scheduleEnd' },
+            { label: '签到时间', field: 'signIn' },
+            { label: '签退时间', field: 'signOut' },
+            { label: '迟到时间', field: 'lateMinutes' },
+            { label: '早退时间', field: 'earlyMinutes' },
+            { label: '加班时间', field: 'overtimeHours' },
+            { label: '出差时间', field: 'travelHours' },
+            { label: '是否旷工', field: 'absent' },
+            { label: '状态', field: 'status' },
+            { label: '请假类型', field: 'leaveType' }
+          ]
+        };
+      },
+      async created() {
+        await this.loadTemplates();
+        await this.loadMonths();
+      },
+      methods: {
+        async loadTemplates() {
+          this.templates = await DB.export_templates.toArray();
+          if (this.templates.length > 0) {
+            this.selectTemplate(this.templates[0]);
+          }
+        },
+        selectTemplate(t) {
+          this.selectedTemplate = t;
+          this.editingFields = JSON.parse(JSON.stringify(t.fields));
+          this.updatePreview();
+        },
+        addField() {
+          if (this.availableColumns.length > 0) {
+            this.editingFields.push({ label: '', field: this.availableColumns[0].field });
+          }
+        },
+        removeField(idx) {
+          this.editingFields.splice(idx, 1);
+          this.updatePreview();
+        },
+        async saveAsTemplate() {
+          const name = prompt('请输入模板名称:');
+          if (!name) return;
+          await DB.export_templates.put({
+            name,
+            isDefault: 0,
+            fields: JSON.parse(JSON.stringify(this.editingFields))
+          });
+          await this.loadTemplates();
+        },
+        async updatePreview() {
+          const sampleData = await DB.attendance_results.limit(5).toArray();
+          this.previewData = sampleData;
+        },
+        async loadMonths() {
+          const results = await Store.getAll('attendance_results');
+          const months = new Set(results.filter(r => r.month).map(r => r.month));
+          this.availableMonths = [...months].sort();
+          if (this.availableMonths.length > 0) {
+            this.exportMonth = this.availableMonths[this.availableMonths.length - 1];
+          }
+        },
+        async doExport() {
+          if (this.editingFields.length === 0) {
+            alert('请至少添加一个导出字段');
+            return;
+          }
+          let records;
+          if (this.exportMonth) {
+            records = await Store.getByIndex('attendance_results', 'month', this.exportMonth);
+          } else {
+            records = await Store.getAll('attendance_results');
+          }
+          if (records.length === 0) {
+            alert('没有可导出的数据');
+            return;
+          }
+          const template = { fields: this.editingFields };
+          const filename = this.exportMonth ? `考勤记录_${this.exportMonth}.xlsx` : '考勤记录_全部.xlsx';
+          Excel.exportToExcel(records, template, filename);
+        }
+      },
+      watch: {
+        editingFields: { deep: true, handler() { this.updatePreview(); } }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

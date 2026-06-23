@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据导入 - 考勤管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .drop-zone { transition: all 0.2s ease; border: 2px dashed #d1d5db; }
+    .drop-zone.dragover { border-color: #3b82f6; background: #eff6ff; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="app" class="max-w-5xl mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+      <div class="flex items-center gap-3">
+        <a href="index.html" class="text-blue-600 hover:underline">&larr; 返回</a>
+        <h1 class="text-2xl font-bold text-gray-800">数据导入</h1>
+      </div>
+    </div>
+
+    <div class="drop-zone bg-white rounded-lg p-8 mb-6 text-center"
+         :class="{ 'dragover': dragging }"
+         @dragover.prevent="dragging = true"
+         @dragleave="dragging = false"
+         @drop.prevent="handleDrop">
+      <p class="text-gray-500 mb-2">拖拽 Excel 文件到此处</p>
+      <p class="text-gray-400 text-sm">或</p>
+      <label class="inline-block mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer transition">
+        选择文件
+        <input type="file" accept=".xlsx,.xls" multiple class="hidden" @change="handleFileSelect">
+      </label>
+    </div>
+
+    <div v-if="files.length > 0" class="bg-white rounded-lg shadow p-6 mb-6">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-semibold text-gray-800">文件列表 ({{ files.length }})</h2>
+        <button @click="importAll" :disabled="importing" class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition">
+          {{ importing ? '导入中...' : '全部入库' }}
+        </button>
+      </div>
+      <div class="space-y-3">
+        <div v-for="(f, idx) in files" :key="idx" class="flex items-center gap-4 p-3 bg-gray-50 rounded">
+          <span class="text-sm font-medium text-gray-700 w-32 truncate">{{ f.fileName }}</span>
+          <span class="px-2 py-1 text-xs rounded" :class="typeClass(f.fileType)">{{ typeLabel(f.fileType) }}</span>
+          <span class="text-sm text-gray-500">解析: {{ f.recordCount }} 条</span>
+          <button @click="showPreview(f)" class="text-sm text-blue-600 hover:underline">预览</button>
+          <span v-if="f.imported" class="text-green-600 text-sm">已入库</span>
+          <span v-if="f.error" class="text-red-600 text-sm">{{ f.error }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="previewFile" class="bg-white rounded-lg shadow p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-semibold text-gray-800">数据预览 - {{ previewFile.fileName }}</h2>
+        <button @click="previewFile = null" class="text-gray-500 hover:text-gray-700">关闭</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-gray-100">
+              <th v-for="col in previewColumns" :key="col" class="px-3 py-2 text-left text-gray-600 whitespace-nowrap">{{ col }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, ri) in previewRows" :key="ri" class="border-t">
+              <td v-for="col in previewColumns" :key="col" class="px-3 py-2 whitespace-nowrap">{{ row[col] }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="./lib/vue.global.prod.js?v=1.0.0"></script>
+  <script src="./lib/dexie.min.js?v=1.0.0"></script>
+  <script src="./lib/xlsx.full.min.js?v=1.0.0"></script>
+  <script src="./shared/auth.js?v=1.0.0"></script>
+  <script src="./shared/db.js?v=1.0.0"></script>
+  <script src="./shared/excel.js?v=1.0.0"></script>
+  <script src="./shared/matcher.js?v=1.0.0"></script>
+  <script>
+    Auth.requireAuth();
+
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          dragging: false,
+          importing: false,
+          files: [],
+          previewFile: null,
+          previewColumns: [],
+          previewRows: []
+        };
+      },
+      methods: {
+        typeLabel(type) {
+          const map = { punch: '打卡', leave: '请假', overtime: '加班', travel: '出差', miss_punch: '漏打卡', schedule: '排班', unknown: '未知' };
+          return map[type] || type;
+        },
+        typeClass(type) {
+          const map = { punch: 'bg-blue-100 text-blue-700', leave: 'bg-yellow-100 text-yellow-700', overtime: 'bg-orange-100 text-orange-700', travel: 'bg-purple-100 text-purple-700', miss_punch: 'bg-pink-100 text-pink-700', schedule: 'bg-green-100 text-green-700', unknown: 'bg-gray-100 text-gray-700' };
+          return map[type] || 'bg-gray-100 text-gray-700';
+        },
+        async handleFileSelect(e) {
+          await this.processFiles(Array.from(e.target.files));
+        },
+        async handleDrop(e) {
+          this.dragging = false;
+          await this.processFiles(Array.from(e.dataTransfer.files));
+        },
+        async processFiles(fileList) {
+          const excelFiles = fileList.filter(f => /\.xlsx?$/i.test(f.name));
+          for (const file of excelFiles) {
+            const existing = this.files.find(f => f.fileName === file.name);
+            if (existing) continue;
+            try {
+              const wb = await Excel.parseExcelFile(file);
+              const ident = Excel.identifyFileType(wb);
+              const records = Excel.parseRecords(wb, ident.type);
+              this.files.push({
+                fileName: file.name,
+                fileType: ident.type,
+                recordCount: records.length,
+                records,
+                workbook: wb,
+                imported: false,
+                error: null
+              });
+            } catch (err) {
+              this.files.push({
+                fileName: file.name,
+                fileType: 'unknown',
+                recordCount: 0,
+                records: [],
+                workbook: null,
+                imported: false,
+                error: err.message
+              });
+            }
+          }
+        },
+        showPreview(f) {
+          this.previewFile = f;
+          if (f.records.length > 0) {
+            this.previewColumns = Object.keys(f.records[0]);
+            this.previewRows = f.records.slice(0, 10);
+          } else {
+            this.previewColumns = [];
+            this.previewRows = [];
+          }
+        },
+        async importAll() {
+          this.importing = true;
+          try {
+            for (const f of this.files) {
+              if (f.imported) continue;
+              switch (f.fileType) {
+                case 'punch':
+                  await Store.clearTable('punch_records');
+                  await Store.bulkPut('punch_records', f.records);
+                  await Matcher.syncEmployees();
+                  break;
+                case 'leave':
+                  await Store.clearTable('leave_records');
+                  await Store.bulkPut('leave_records', f.records);
+                  break;
+                case 'overtime':
+                  await Store.clearTable('overtime_records');
+                  await Store.bulkPut('overtime_records', f.records);
+                  break;
+                case 'travel':
+                  await Store.clearTable('travel_records');
+                  await Store.bulkPut('travel_records', f.records);
+                  break;
+                case 'miss_punch':
+                  await Store.clearTable('miss_punch_records');
+                  await Store.bulkPut('miss_punch_records', f.records);
+                  break;
+                case 'schedule':
+                  const employees = await Store.getAll('employees');
+                  const scheduleRows = [];
+                  for (const s of f.records) {
+                    if (!s.year || !s.month) continue;
+                    for (const emp of employees) {
+                      scheduleRows.push({
+                        employeeNo: emp.employeeNo,
+                        name: emp.name,
+                        department: emp.department,
+                        year: s.year,
+                        month: s.month,
+                        workDays: s.workDays
+                      });
+                    }
+                  }
+                  await Store.clearTable('schedules');
+                  await Store.bulkPut('schedules', scheduleRows);
+                  break;
+              }
+              await DB.raw_files.put({
+                fileName: f.fileName,
+                fileType: f.fileType,
+                importTime: new Date().toISOString()
+              });
+              f.imported = true;
+            }
+            alert('所有数据导入完成！可前往考勤计算页面运行计算。');
+          } catch (err) {
+            alert('导入出错: ' + err.message);
+          }
+          this.importing = false;
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
