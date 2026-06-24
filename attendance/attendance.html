@@ -9,6 +9,9 @@
     .status-normal { background: #dcfce7; color: #166534; }
     .status-abnormal { background: #fef9c3; color: #854d0e; }
     .status-absent { background: #fee2e2; color: #991b1b; }
+    .status-rest { background: #f3f4f6; color: #6b7280; }
+    .status-leave { background: #dbeafe; color: #1e40af; }
+    .status-travel { background: #f3e8ff; color: #6b21a8; }
     .cal-cell { min-height: 80px; transition: all 0.15s; }
     .cal-cell:hover { transform: scale(1.02); z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
   </style>
@@ -38,10 +41,18 @@
       <select v-model="filterStatus" class="px-3 py-1 border rounded text-sm">
         <option value="">全部状态</option>
         <option value="normal">正常</option>
-        <option value="abnormal">异常</option>
+        <option value="rest">休息</option>
+        <option value="abnormal">迟到</option>
+        <option value="leave">请假</option>
+        <option value="travel">出差</option>
         <option value="absent">缺勤</option>
       </select>
       <input v-model="searchName" type="text" placeholder="搜索姓名" class="px-3 py-1 border rounded text-sm w-32">
+    </div>
+
+    <div v-if="configChanged" class="mb-4 p-3 bg-yellow-100 text-yellow-800 rounded-md flex justify-between items-center">
+      <span>考勤规则已变更，当前结果可能不是最新规则计算的。</span>
+      <button @click="runCalculation" class="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700 transition">重新计算</button>
     </div>
 
     <div v-if="viewMode === 'list'" class="bg-white rounded-lg shadow overflow-hidden">
@@ -52,11 +63,13 @@
             <th class="px-3 py-2 text-left">姓名</th>
             <th class="px-3 py-2 text-left">部门</th>
             <th class="px-3 py-2 text-left">日期</th>
+            <th class="px-3 py-2 text-left">排班</th>
             <th class="px-3 py-2 text-left">签到</th>
             <th class="px-3 py-2 text-left">签退</th>
             <th class="px-3 py-2 text-left">迟到(min)</th>
             <th class="px-3 py-2 text-left">早退(min)</th>
             <th class="px-3 py-2 text-left">加班(h)</th>
+            <th class="px-3 py-2 text-left">备注</th>
             <th class="px-3 py-2 text-left">状态</th>
           </tr>
         </thead>
@@ -66,11 +79,13 @@
             <td class="px-3 py-2">{{ r.name }}</td>
             <td class="px-3 py-2">{{ r.department }}</td>
             <td class="px-3 py-2">{{ r.date }}</td>
+            <td class="px-3 py-2">{{ r.isRestDay ? '休息' : '上班' }}</td>
             <td class="px-3 py-2">{{ r.signIn }}</td>
             <td class="px-3 py-2">{{ r.signOut }}</td>
             <td class="px-3 py-2">{{ r.lateMinutes }}</td>
             <td class="px-3 py-2">{{ r.earlyMinutes }}</td>
             <td class="px-3 py-2">{{ r.overtimeHours }}</td>
+            <td class="px-3 py-2 text-xs">{{ remarkText(r) }}</td>
             <td class="px-3 py-2">
               <span class="px-2 py-0.5 rounded text-xs" :class="statusCellClass(r.status)">{{ statusLabel(r.status) }}</span>
             </td>
@@ -112,6 +127,7 @@
           <div><span class="text-gray-500">出差:</span> {{ detail.travelHours }}h</div>
           <div><span class="text-gray-500">请假类型:</span> {{ detail.leaveType || '--' }}</div>
           <div><span class="text-gray-500">状态:</span> <span :class="statusCellClass(detail.status)">{{ statusLabel(detail.status) }}</span></div>
+          <div><span class="text-gray-500">排班:</span> {{ detail.isRestDay ? '休息' : '上班' }}</div>
         </div>
         <div v-if="detail.sourcePunches && detail.sourcePunches.length" class="mb-4">
           <h4 class="font-semibold mb-2">关联打卡记录</h4>
@@ -120,28 +136,55 @@
             <tbody><tr v-for="p in detail.sourcePunches" :key="p.id"><td class="p-1 border">{{ p.signIn }}</td><td class="p-1 border">{{ p.signOut }}</td><td class="p-1 border">{{ p.lateMinutes }}</td><td class="p-1 border">{{ p.earlyMinutes }}</td></tr></tbody>
           </table>
         </div>
+        <div v-if="detail.sourceLeaves && detail.sourceLeaves.length" class="mb-4">
+          <h4 class="font-semibold mb-2">关联请假记录</h4>
+          <table class="w-full text-sm border">
+            <thead><tr class="bg-gray-50"><th class="p-1 border">类型</th><th class="p-1 border">开始</th><th class="p-1 border">结束</th><th class="p-1 border">天数</th><th class="p-1 border">小时</th></tr></thead>
+            <tbody><tr v-for="l in detail.sourceLeaves" :key="l.id"><td class="p-1 border">{{ l.leaveType }}</td><td class="p-1 border">{{ l.startDate }}</td><td class="p-1 border">{{ l.endDate }}</td><td class="p-1 border">{{ l.leaveDays }}</td><td class="p-1 border">{{ l.leaveHours }}</td></tr></tbody>
+          </table>
+        </div>
+        <div v-if="detail.sourceTravels && detail.sourceTravels.length" class="mb-4">
+          <h4 class="font-semibold mb-2">关联出差记录</h4>
+          <table class="w-full text-sm border">
+            <thead><tr class="bg-gray-50"><th class="p-1 border">开始</th><th class="p-1 border">结束</th><th class="p-1 border">事由</th></tr></thead>
+            <tbody><tr v-for="t in detail.sourceTravels" :key="t.id"><td class="p-1 border">{{ t.startDate }}</td><td class="p-1 border">{{ t.endDate }}</td><td class="p-1 border">{{ t.reason }}</td></tr></tbody>
+          </table>
+        </div>
+        <div v-if="detail.sourceMisses && detail.sourceMisses.length" class="mb-4">
+          <h4 class="font-semibold mb-2">关联漏打卡说明</h4>
+          <table class="w-full text-sm border">
+            <thead><tr class="bg-gray-50"><th class="p-1 border">日期</th><th class="p-1 border">说明</th></tr></thead>
+            <tbody><tr v-for="m in detail.sourceMisses" :key="m.id"><td class="p-1 border">{{ m.missDate }}</td><td class="p-1 border">{{ m.reason }}</td></tr></tbody>
+          </table>
+        </div>
+        <div v-if="detail.sourceOvertimes && detail.sourceOvertimes.length" class="mb-4">
+          <h4 class="font-semibold mb-2">关联加班记录</h4>
+          <table class="w-full text-sm border">
+            <thead><tr class="bg-gray-50"><th class="p-1 border">开始</th><th class="p-1 border">结束</th><th class="p-1 border">小时</th><th class="p-1 border">内容</th></tr></thead>
+            <tbody><tr v-for="o in detail.sourceOvertimes" :key="o.id"><td class="p-1 border">{{ o.startTime }}</td><td class="p-1 border">{{ o.endTime }}</td><td class="p-1 border">{{ o.overtimeHours }}</td><td class="p-1 border">{{ o.content }}</td></tr></tbody>
+          </table>
+        </div>
         <button @click="detail = null" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">关闭</button>
       </div>
     </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.0"></script>
-  <script src="./lib/dexie.min.js?v=1.0.0"></script>
-  <script src="./shared/auth.js?v=1.0.0"></script>
-  <script src="./shared/db.js?v=1.0.0"></script>
-  <script src="./shared/rules.js?v=1.0.0"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.10"></script>
+  <script src="./lib/dexie.min.js?v=1.0.10"></script>
+  <script src="./shared/auth.js?v=1.0.10"></script>
+  <script src="./shared/db.js?v=1.0.10"></script>
+  <script src="./shared/rules.js?v=1.0.10"></script>
   <script>
     Auth.requireAuth();
 
     const { createApp } = Vue;
     createApp({
       data() {
-        const now = new Date();
-        const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         return {
           viewMode: 'list',
           calculating: false,
-          currentMonth: defaultMonth,
+          configChanged: false,
+          currentMonth: '',
           filterDept: '',
           filterStatus: '',
           searchName: '',
@@ -171,6 +214,7 @@
         },
       },
       async created() {
+        this.currentMonth = await this.detectDataMonth();
         await this.loadResults();
       },
       watch: {
@@ -179,48 +223,116 @@
       },
       methods: {
         statusLabel(s) {
-          const map = { normal: '正常', abnormal: '异常', absent: '缺勤' };
+          const map = { normal: '正常', rest: '休息', abnormal: '迟到', leave: '请假', travel: '出差', absent: '缺勤' };
           return map[s] || s;
         },
         statusCellClass(s) {
-          const map = { normal: 'px-2 py-0.5 rounded text-xs status-normal', abnormal: 'px-2 py-0.5 rounded text-xs status-abnormal', absent: 'px-2 py-0.5 rounded text-xs status-absent' };
+          const map = { normal: 'px-2 py-0.5 rounded text-xs status-normal', rest: 'px-2 py-0.5 rounded text-xs status-rest', abnormal: 'px-2 py-0.5 rounded text-xs status-abnormal', leave: 'px-2 py-0.5 rounded text-xs status-leave', travel: 'px-2 py-0.5 rounded text-xs status-travel', absent: 'px-2 py-0.5 rounded text-xs status-absent' };
           return map[s] || '';
+        },
+        remarkText(r) {
+          const parts = [];
+          if (r.leaveType) parts.push(r.leaveType);
+          if (r.travelHours > 0 && !r.leaveType) parts.push('出差');
+          if (r.absent) parts.push('缺勤');
+          return parts.join(', ');
+        },
+        async detectDataMonth() {
+          const punches = await Store.getAll('punch_records');
+          if (punches.length === 0) {
+            const now = new Date();
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          }
+          const dates = punches.map(p => {
+            const m = (p.date || '').match(/^(\d{4})-(\d{2})/);
+            return m ? m[1] + '-' + m[2] : null;
+          }).filter(Boolean).sort();
+          return dates[dates.length - 1];
         },
         async loadResults() {
           this.results = await RulesEngine.getMonthResults(this.currentMonth);
-          if (this.viewMode === 'calendar') this.buildCalendar();
+          if (this.results.length === 0) {
+            const punches = await Store.getAll('punch_records');
+            const hasData = punches.some(p => p.date && p.date.startsWith(this.currentMonth));
+            if (hasData) await this.runCalculation();
+          } else {
+            const configEntry = await Store.getByKey('settings', 'config_updated_at');
+            if (configEntry && configEntry.value) {
+              const savedAt = new Date(configEntry.value).toISOString();
+              const lastResults = this.results[0];
+              if (lastResults && lastResults.month === this.currentMonth) {
+                const calcTime = await Store.getByKey('settings', 'last_calc_' + this.currentMonth);
+                if (!calcTime || (calcTime.value < configEntry.value)) {
+                  this.configChanged = true;
+                }
+              }
+            }
+          }
+          if (this.viewMode === 'calendar') await this.buildCalendar();
           const depts = new Set(this.results.map(r => r.department).filter(Boolean));
           this.departments = [...depts].sort();
         },
         async runCalculation() {
           this.calculating = true;
+          this.configChanged = false;
           try {
             await RulesEngine.calculateMonth(this.currentMonth);
+            await Store.put('settings', { key: 'last_calc_' + this.currentMonth, value: Date.now() });
             await this.loadResults();
           } catch (err) {
             alert('计算出错: ' + err.message);
           }
           this.calculating = false;
         },
-        buildCalendar() {
+        async buildCalendar() {
           const [y, m] = this.currentMonth.split('-').map(Number);
           const firstDay = new Date(y, m - 1, 1);
           const lastDate = new Date(y, m, 0).getDate();
           const startDow = firstDay.getDay() || 7;
           const cells = [];
+
+          const allSchedules = await Store.getByIndex('schedules', 'year', y);
+          const scheduleMap = {};
+          for (const s of allSchedules) {
+            if (s.month !== m) continue;
+            if (!scheduleMap[s.employeeNo]) scheduleMap[s.employeeNo] = s;
+          }
+
+          const employeeNos = [...new Set(this.results.map(r => r.employeeNo))];
+
           for (let i = 1; i < startDow; i++) {
             cells.push({ key: 'prev-' + i, day: '', isRest: false, record: null, statusClass: 'bg-gray-50' });
           }
           for (let d = 1; d <= lastDate; d++) {
             const dateStr = `${this.currentMonth}-${String(d).padStart(2, '0')}`;
-            const record = this.results.find(r => r.date === dateStr);
-            let statusClass = 'bg-white';
-            if (record) {
-              if (record.status === 'normal') statusClass = 'bg-green-50 border-green-300';
-              else if (record.status === 'abnormal') statusClass = 'bg-yellow-50 border-yellow-300';
-              else if (record.status === 'absent') statusClass = 'bg-red-50 border-red-300';
+            const dayRecords = this.results.filter(r => r.date === dateStr);
+            const day = String(d).padStart(2, '0');
+
+            let allRest = true;
+            let hasSchedule = false;
+            for (const eno of employeeNos) {
+              const sch = scheduleMap[eno];
+              if (sch && sch.workDays) {
+                hasSchedule = true;
+                if (sch.workDays[day]) allRest = false;
+              }
             }
-            cells.push({ key: dateStr, day: d, isRest: !record && false, record, statusClass });
+            if (!hasSchedule) allRest = false;
+
+            let statusClass = 'bg-white';
+            const firstRecord = dayRecords[0];
+            if (firstRecord) {
+              if (firstRecord.status === 'normal') statusClass = 'bg-green-50 border-green-300';
+              else if (firstRecord.status === 'rest') statusClass = 'bg-gray-100 border-gray-300';
+              else if (firstRecord.status === 'abnormal') statusClass = 'bg-yellow-50 border-yellow-300';
+              else if (firstRecord.status === 'leave') statusClass = 'bg-blue-50 border-blue-300';
+              else if (firstRecord.status === 'travel') statusClass = 'bg-purple-50 border-purple-300';
+              else if (firstRecord.status === 'absent') statusClass = 'bg-red-50 border-red-300';
+            } else if (allRest) {
+              statusClass = 'bg-gray-100 border-gray-300';
+            }
+
+            cells.push({ key: dateStr, day: d, isRest: allRest && !firstRecord, record: firstRecord || null, statusClass });
           }
           this.calendarCells = cells;
         },

@@ -51,6 +51,19 @@
       </div>
     </div>
 
+    <div v-if="importLog.length" class="bg-white rounded-lg shadow p-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">导入日志</h2>
+      <div class="text-sm">
+        <div v-for="(log, i) in importLog" :key="i" class="flex items-center gap-3 py-1 border-b border-gray-100 last:border-0">
+          <span class="text-gray-400 w-20">{{ log.time }}</span>
+          <span :class="typeClass(log.type)">{{ typeLabel(log.type) }}</span>
+          <span class="text-gray-700 truncate flex-1">{{ log.file }}</span>
+          <span v-if="log.action === 'ok'" class="text-green-600">+{{ log.count }} 条</span>
+          <span v-else class="text-gray-400">{{ log.msg }}</span>
+        </div>
+      </div>
+    </div>
+
     <div v-if="previewFile" class="bg-white rounded-lg shadow p-6">
       <div class="flex justify-between items-center mb-4">
         <h2 class="text-lg font-semibold text-gray-800">数据预览 - {{ previewFile.fileName }}</h2>
@@ -73,13 +86,13 @@
     </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.0"></script>
-  <script src="./lib/dexie.min.js?v=1.0.0"></script>
-  <script src="./lib/xlsx.full.min.js?v=1.0.0"></script>
-  <script src="./shared/auth.js?v=1.0.0"></script>
-  <script src="./shared/db.js?v=1.0.0"></script>
-  <script src="./shared/excel.js?v=1.0.0"></script>
-  <script src="./shared/matcher.js?v=1.0.0"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.9"></script>
+  <script src="./lib/dexie.min.js?v=1.0.9"></script>
+  <script src="./lib/xlsx.full.min.js?v=1.0.9"></script>
+  <script src="./shared/auth.js?v=1.0.9"></script>
+  <script src="./shared/db.js?v=1.0.9"></script>
+  <script src="./shared/excel.js?v=1.0.9"></script>
+  <script src="./shared/matcher.js?v=1.0.9"></script>
   <script>
     Auth.requireAuth();
 
@@ -92,7 +105,8 @@
           files: [],
           previewFile: null,
           previewColumns: [],
-          previewRows: []
+          previewRows: [],
+          importLog: []
         };
       },
       methods: {
@@ -120,7 +134,7 @@
               const wb = await Excel.parseExcelFile(file);
               const ident = Excel.identifyFileType(wb);
               const records = Excel.parseRecords(wb, ident.type);
-              this.files.push({
+              const entry = {
                 fileName: file.name,
                 fileType: ident.type,
                 recordCount: records.length,
@@ -128,7 +142,13 @@
                 workbook: wb,
                 imported: false,
                 error: null
-              });
+              };
+              if (ident.type === 'unknown') {
+                const firstSheet = wb.Sheets[wb.SheetNames[0]];
+                const headers = Excel.sheetToArray(firstSheet)[0] || [];
+                entry.error = '未识别类型，表头: ' + headers.filter(Boolean).slice(0, 5).join(', ');
+              }
+              this.files.push(entry);
             } catch (err) {
               this.files.push({
                 fileName: file.name,
@@ -137,7 +157,7 @@
                 records: [],
                 workbook: null,
                 imported: false,
-                error: err.message
+                error: '解析失败: ' + (err.message || err)
               });
             }
           }
@@ -154,59 +174,89 @@
         },
         async importAll() {
           this.importing = true;
+          const existingFiles = await Store.getAll('raw_files');
+          const importedNames = new Set(existingFiles.map(f => f.fileName));
+          let scheduleFile = null;
           try {
             for (const f of this.files) {
               if (f.imported) continue;
-              switch (f.fileType) {
-                case 'punch':
-                  await Store.clearTable('punch_records');
-                  await Store.bulkPut('punch_records', f.records);
-                  await Matcher.syncEmployees();
-                  break;
-                case 'leave':
-                  await Store.clearTable('leave_records');
-                  await Store.bulkPut('leave_records', f.records);
-                  break;
-                case 'overtime':
-                  await Store.clearTable('overtime_records');
-                  await Store.bulkPut('overtime_records', f.records);
-                  break;
-                case 'travel':
-                  await Store.clearTable('travel_records');
-                  await Store.bulkPut('travel_records', f.records);
-                  break;
-                case 'miss_punch':
-                  await Store.clearTable('miss_punch_records');
-                  await Store.bulkPut('miss_punch_records', f.records);
-                  break;
-                case 'schedule':
-                  const employees = await Store.getAll('employees');
-                  const scheduleRows = [];
-                  for (const s of f.records) {
-                    if (!s.year || !s.month) continue;
-                    for (const emp of employees) {
-                      scheduleRows.push({
-                        employeeNo: emp.employeeNo,
-                        name: emp.name,
-                        department: emp.department,
-                        year: s.year,
-                        month: s.month,
-                        workDays: s.workDays
-                      });
-                    }
-                  }
-                  await Store.clearTable('schedules');
-                  await Store.bulkPut('schedules', scheduleRows);
-                  break;
+              if (importedNames.has(f.fileName)) {
+                this.importLog.unshift({ time: new Date().toLocaleTimeString(), file: f.fileName, type: f.fileType, count: 0, action: 'skip', msg: '已存在，跳过' });
+                f.imported = true;
+                continue;
               }
-              await DB.raw_files.put({
-                fileName: f.fileName,
-                fileType: f.fileType,
-                importTime: new Date().toISOString()
-              });
-              f.imported = true;
+              if (f.fileType === 'schedule') { scheduleFile = f; continue; }
+              try {
+                switch (f.fileType) {
+                  case 'punch':
+                    await Store.clearTable('punch_records');
+                    await Store.bulkPut('punch_records', f.records);
+                    await Matcher.syncEmployees();
+                    break;
+                  case 'leave':
+                    await Store.clearTable('leave_records');
+                    await Store.bulkPut('leave_records', f.records);
+                    break;
+                  case 'overtime':
+                    await Store.clearTable('overtime_records');
+                    await Store.bulkPut('overtime_records', f.records);
+                    break;
+                  case 'travel':
+                    await Store.clearTable('travel_records');
+                    await Store.bulkPut('travel_records', f.records);
+                    break;
+                  case 'miss_punch':
+                    await Store.clearTable('miss_punch_records');
+                    await Store.bulkPut('miss_punch_records', f.records);
+                    break;
+                }
+                await DB.raw_files.put({
+                  fileName: f.fileName,
+                  fileType: f.fileType,
+                  importTime: new Date().toISOString()
+                });
+                f.imported = true;
+                this.importLog.unshift({ time: new Date().toLocaleTimeString(), file: f.fileName, type: f.fileType, count: f.records.length, action: 'ok', msg: '导入 ' + f.records.length + ' 条' });
+              } catch (innerErr) {
+                alert('导入 ' + f.fileName + ' (' + f.fileType + ') 失败: ' + innerErr.message);
+                f.error = innerErr.message;
+              }
             }
-            alert('所有数据导入完成！可前往考勤计算页面运行计算。');
+            if (scheduleFile && !scheduleFile.imported) {
+              try {
+                await Matcher.syncEmployees();
+                const employees = await Store.getAll('employees');
+                const scheduleRows = [];
+                for (const s of scheduleFile.records) {
+                  if (!s.year || !s.month) continue;
+                  for (const emp of employees) {
+                    scheduleRows.push({
+                      employeeNo: emp.employeeNo,
+                      name: emp.name,
+                      department: emp.department,
+                      year: s.year,
+                      month: s.month,
+                      workDays: s.workDays
+                    });
+                  }
+                }
+                await Store.clearTable('schedules');
+                await Store.bulkPut('schedules', scheduleRows);
+                await DB.raw_files.put({
+                  fileName: scheduleFile.fileName,
+                  fileType: scheduleFile.fileType,
+                  importTime: new Date().toISOString()
+                });
+                scheduleFile.imported = true;
+                this.importLog.unshift({ time: new Date().toLocaleTimeString(), file: scheduleFile.fileName, type: scheduleFile.fileType, count: scheduleRows.length, action: 'ok', msg: '排班展开 ' + employees.length + ' 人 x ' + scheduleFile.records.length + ' 月 = ' + scheduleRows.length + ' 条' });
+              } catch (innerErr) {
+                alert('排班导入失败: ' + innerErr.message);
+                scheduleFile.error = innerErr.message;
+              }
+            }
+            if (this.files.every(f => f.imported)) {
+              alert('所有数据导入完成！可前往考勤计算页面运行计算。');
+            }
           } catch (err) {
             alert('导入出错: ' + err.message);
           }

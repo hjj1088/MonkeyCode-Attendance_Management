@@ -79,6 +79,11 @@ const RulesEngine = {
     const leaveRecords = await Store.getByRange('leave_records', 'startDate', startDate, endDate);
     const travelRecords = await Store.getByRange('travel_records', 'startDate', startDate, endDate);
     const missPunchRecords = await Store.getByRange('miss_punch_records', 'missDate', startDate, endDate);
+    const allOvertimeRecords = await Store.getAll('overtime_records');
+    const overtimeRecords = allOvertimeRecords.filter(o => {
+      const dateStr = (o.startTime || '').substring(0, 10);
+      return dateStr >= startDate && dateStr <= endDate;
+    });
 
     const punchByEmployee = {};
     for (const p of punchRecords) {
@@ -103,6 +108,9 @@ const RulesEngine = {
       }
       const lateRecords = [];
 
+      const employeeName = punches[0].name;
+      const department = punches[0].department;
+
       const punchByDate = {};
       for (const p of punches) {
         if (!punchByDate[p.date]) punchByDate[p.date] = [];
@@ -114,8 +122,6 @@ const RulesEngine = {
         const isWorkDay = this._isWorkDay(schedulesData, holidaysData, dateStr);
 
         const dayPunches = punchByDate[dateStr] || [];
-        const employeeName = punches[0].name;
-        const department = punches[0].department;
 
         let firstSignIn = null;
         let lastSignOut = null;
@@ -139,6 +145,12 @@ const RulesEngine = {
         let adjustedOvertime = totalOvertime;
         let leaveType = '';
         let travelHours = 0;
+        let isRestDay = false;
+
+        if (!isWorkDay) {
+          status = 'rest';
+          isRestDay = true;
+        }
 
         const missRecord = missPunchRecords.find(m =>
           (m.missDate === dateStr) &&
@@ -153,20 +165,29 @@ const RulesEngine = {
           t.applicant === employeeName && dateStr >= t.startDate && dateStr <= t.endDate
         );
 
+        const overtimeRecord = overtimeRecords.find(o => {
+          const oDate = (o.startTime || '').substring(0, 10);
+          return o.applicant === employeeName && oDate === dateStr;
+        });
+
+        if (overtimeRecord) {
+          adjustedOvertime += overtimeRecord.overtimeHours || 0;
+        }
+
         if (leaveRecord && (!dayPunches.length || leaveRecord.leaveDays >= 1)) {
-          status = 'abnormal';
+          status = 'leave';
           leaveType = leaveRecord.leaveType;
-          if (leaveRecord.leaveType === '调休') {
+          if (leaveRecord.leaveType && leaveRecord.leaveType.includes('调休')) {
             adjustedOvertime -= leaveRecord.leaveHours || 0;
           }
         }
 
         if (travelRecord) {
-          status = 'abnormal';
+          status = 'travel';
           travelHours = 8;
         }
 
-        if (missRecord && dayPunches.length === 0) {
+        if (missRecord) {
           status = 'normal';
         }
 
@@ -175,8 +196,9 @@ const RulesEngine = {
           absent = true;
         }
 
-        if (totalLate > 0 && dayPunches.length > 0) {
+        if (totalLate > 0 && dayPunches.length > 0 && status !== 'leave' && status !== 'travel') {
           lateRecords.push({ date: dateStr, minutes: totalLate });
+          status = 'abnormal';
         }
 
         results.push({
@@ -196,11 +218,13 @@ const RulesEngine = {
           absent,
           status,
           leaveType,
+          isRestDay,
           month: targetMonth,
           sourcePunchIds: dayPunches.map(p => p.id).filter(Boolean),
           sourceLeaveIds: leaveRecord ? [leaveRecord.id] : [],
           sourceTravelIds: travelRecord ? [travelRecord.id] : [],
-          sourceMissIds: missRecord ? [missRecord.id] : []
+          sourceMissIds: missRecord ? [missRecord.id] : [],
+          sourceOvertimeIds: overtimeRecord ? [overtimeRecord.id] : []
         });
       }
 
@@ -208,6 +232,7 @@ const RulesEngine = {
       if (lateRecords.length <= config.graceTimes && totalLateMinutes <= config.graceMinutes) {
         for (const r of results.filter(r => r.employeeNo === employeeNo)) {
           r.lateMinutes = 0;
+          if (r.status === 'abnormal') r.status = 'normal';
         }
       }
 
@@ -231,7 +256,7 @@ const RulesEngine = {
 
   async _updateCarryOver(employeeNo, name, targetMonth, monthOvertime, leaveRecords) {
     const adjustmentHours = leaveRecords
-      .filter(l => l.leaveType === '调休')
+      .filter(l => l.leaveType && l.leaveType.includes('调休'))
       .reduce((sum, l) => sum + (l.leaveHours || 0), 0);
 
     const [yearStr, monthStr] = targetMonth.split('-');
@@ -271,7 +296,7 @@ const RulesEngine = {
 
     if (!result) return null;
 
-    const detail = { ...result, sourcePunches: [], sourceLeaves: [], sourceTravels: [], sourceMisses: [] };
+    const detail = { ...result, sourcePunches: [], sourceLeaves: [], sourceTravels: [], sourceMisses: [], sourceOvertimes: [] };
 
     for (const id of (result.sourcePunchIds || [])) {
       const rec = await Store.getByKey('punch_records', id);
@@ -288,6 +313,10 @@ const RulesEngine = {
     for (const id of (result.sourceMissIds || [])) {
       const rec = await Store.getByKey('miss_punch_records', id);
       if (rec) detail.sourceMisses.push(rec);
+    }
+    for (const id of (result.sourceOvertimeIds || [])) {
+      const rec = await Store.getByKey('overtime_records', id);
+      if (rec) detail.sourceOvertimes.push(rec);
     }
 
     return detail;

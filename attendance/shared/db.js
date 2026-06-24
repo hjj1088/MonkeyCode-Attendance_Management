@@ -1,30 +1,46 @@
 // shared/db.js
 // IndexedDB 数据库 Schema 与 CRUD 操作 (基于 Dexie.js)
 
-const DB = new Dexie('AttendanceDB');
+let DB;
 
-DB.version(1).stores({
-  raw_files:        '++id, fileType, importTime',
-  punch_records:    '++id, employeeNo, name, date, department',
-  leave_records:    '++id, applicant, startDate, endDate',
-  overtime_records: '++id, applicant',
-  travel_records:   '++id, applicant',
-  miss_punch_records: '++id, applicant, missDate',
-  schedules:        '++id, [employeeNo+year+month], year, month',
-  attendance_results: '[employeeNo+date], employeeNo, date, month, department, status',
-  carry_over:       '[employeeNo+month], employeeNo, month',
-  holidays:         '++id, date',
-  settings:         'key',
-  export_templates: '++id, isDefault',
-  employees:        'employeeNo, name, department'
-});
+function createDB() {
+  DB = new Dexie('AttendanceDB');
+
+  DB.version(1).stores({
+    raw_files:        '++id, fileType, importTime',
+    punch_records:    '++id, employeeNo, name, date, department',
+    leave_records:    '++id, applicant, startDate, endDate',
+    overtime_records: '++id, applicant',
+    travel_records:   '++id, applicant',
+    miss_punch_records: '++id, applicant, missDate',
+    schedules:        '++id, [employeeNo+year+month], year, month',
+    attendance_results: '[employeeNo+date], employeeNo, date, month, department, status',
+    carry_over:       '[employeeNo+month], employeeNo, month',
+    holidays:         '++id, date',
+    settings:         'key',
+    export_templates: '++id, isDefault',
+    employees:        'employeeNo, name, department'
+  });
+
+  DB.version(2).stores({
+    travel_records: '++id, applicant, startDate'
+  }).upgrade(async tx => {
+    try { await tx.table('travel_records').clear(); } catch (e) {}
+  });
+}
+
+createDB();
 
 // --- 通用 CRUD 工具 ---
 
 const Store = {
+  _clean(value) {
+    return JSON.parse(JSON.stringify(value));
+  },
+
   async bulkPut(tableName, records) {
     if (!records || records.length === 0) return 0;
-    return DB[tableName].bulkPut(records);
+    return DB[tableName].bulkPut(this._clean(records));
   },
 
   async clearTable(tableName) {
@@ -48,11 +64,24 @@ const Store = {
   },
 
   async put(tableName, record) {
-    return DB[tableName].put(record);
+    return DB[tableName].put(this._clean(record));
   },
 
   async deleteByKey(tableName, key) {
     return DB[tableName].delete(key);
+  },
+
+  async resetAllData() {
+    const tableNames = [
+      'raw_files', 'punch_records', 'leave_records', 'overtime_records',
+      'travel_records', 'miss_punch_records', 'schedules',
+      'attendance_results', 'carry_over', 'holidays', 'settings',
+      'export_templates', 'employees'
+    ];
+    for (const t of tableNames) {
+      await DB[t].clear();
+    }
+    await initDefaultSettings();
   }
 };
 
@@ -100,4 +129,14 @@ async function initDefaultSettings() {
   }
 }
 
-DB.open().then(() => initDefaultSettings());
+function startDB() {
+  return DB.open().then(() => initDefaultSettings()).catch(async err => {
+    console.warn('DB open failed, recreating:', err.message);
+    await Dexie.delete('AttendanceDB');
+    createDB();
+    await DB.open();
+    return initDefaultSettings();
+  });
+}
+
+startDB();

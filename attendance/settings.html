@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>系统设置 - 考勤管理</title>
+  <title>考勤规则设置 - 考勤管理</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -11,12 +11,12 @@
     <div class="flex justify-between items-center mb-6">
       <div class="flex items-center gap-3">
         <a href="index.html" class="text-blue-600 hover:underline">&larr; 返回</a>
-        <h1 class="text-2xl font-bold text-gray-800">系统设置</h1>
+        <h1 class="text-2xl font-bold text-gray-800">考勤规则设置</h1>
       </div>
       <button @click="saveConfig" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">保存设置</button>
     </div>
 
-    <div v-if="saved" class="mb-4 p-3 bg-green-100 text-green-700 rounded-md">设置已保存</div>
+    <div v-if="saved" class="mb-4 p-3 bg-green-100 text-green-700 rounded-md">设置已保存，请前往考勤计算页点击「重新计算」使新规则生效。</div>
 
     <div class="bg-white rounded-lg shadow p-6 mb-6">
       <h2 class="text-lg font-semibold text-gray-800 mb-4">考勤规则配置</h2>
@@ -56,14 +56,27 @@
 
     <div class="bg-white rounded-lg shadow p-6">
       <h2 class="text-lg font-semibold text-gray-800 mb-4">假期管理</h2>
-      <div class="flex gap-3 mb-4">
-        <input v-model="newHoliday.date" type="date" class="px-3 py-2 border rounded-md flex-1">
-        <input v-model="newHoliday.name" type="text" placeholder="假期名称" class="px-3 py-2 border rounded-md flex-1">
-        <select v-model="newHoliday.type" class="px-3 py-2 border rounded-md">
-          <option value="holiday">休息日</option>
-          <option value="workday">调休上班日</option>
-        </select>
-        <button @click="addHoliday" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">添加</button>
+      <div class="flex flex-wrap gap-3 mb-4 items-end">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">开始日期</label>
+          <input v-model="newHoliday.startDate" type="date" class="px-3 py-2 border rounded-md">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">结束日期</label>
+          <input v-model="newHoliday.endDate" type="date" class="px-3 py-2 border rounded-md">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">假期名称</label>
+          <input v-model="newHoliday.name" type="text" placeholder="例：春节" class="px-3 py-2 border rounded-md w-32">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">类型</label>
+          <select v-model="newHoliday.type" class="px-3 py-2 border rounded-md">
+            <option value="holiday">休息日</option>
+            <option value="workday">调休上班日</option>
+          </select>
+        </div>
+        <button @click="addHolidays" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition h-10">批量添加</button>
       </div>
       <div class="space-y-2">
         <div v-for="h in holidays" :key="h.id" class="flex justify-between items-center p-2 bg-gray-50 rounded">
@@ -73,12 +86,21 @@
         <div v-if="holidays.length === 0" class="text-gray-400 text-sm text-center py-4">暂无假期设置</div>
       </div>
     </div>
+
+    <div class="bg-white rounded-lg shadow p-6 mt-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">数据管理</h2>
+      <p class="text-sm text-gray-500 mb-3">清空所有导入数据和分析结果，保留设置。</p>
+      <button @click="resetDB" :disabled="resetting" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 transition">
+        {{ resetting ? '重置中...' : '重置数据库' }}
+      </button>
+      <span v-if="resetDone" class="ml-3 text-green-600 text-sm">已重置</span>
+    </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.0"></script>
-  <script src="./lib/dexie.min.js?v=1.0.0"></script>
-  <script src="./shared/auth.js?v=1.0.0"></script>
-  <script src="./shared/db.js?v=1.0.0"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.10"></script>
+  <script src="./lib/dexie.min.js?v=1.0.10"></script>
+  <script src="./shared/auth.js?v=1.0.10"></script>
+  <script src="./shared/db.js?v=1.0.10"></script>
   <script>
     Auth.requireAuth();
 
@@ -87,6 +109,8 @@
       data() {
         return {
           saved: false,
+          resetting: false,
+          resetDone: false,
           config: {
             workStartTime: '08:30',
             workEndTime: '17:30',
@@ -96,7 +120,7 @@
             graceMinutes: 30
           },
           holidays: [],
-          newHoliday: { date: '', name: '', type: 'holiday' }
+          newHoliday: { startDate: '', endDate: '', name: '', type: 'holiday' }
         };
       },
       async created() {
@@ -109,23 +133,44 @@
       methods: {
         async saveConfig() {
           await Store.put('settings', { key: 'attendance_config', value: { ...this.config } });
+          await Store.put('settings', { key: 'config_updated_at', value: Date.now() });
           this.saved = true;
-          setTimeout(() => { this.saved = false; }, 2000);
+          setTimeout(() => { this.saved = false; }, 4000);
         },
-        async addHoliday() {
-          if (!this.newHoliday.date) return;
-          await DB.holidays.put({
-            date: this.newHoliday.date,
-            name: this.newHoliday.name || '假期',
-            isWorkday: this.newHoliday.type === 'workday',
-            isHoliday: this.newHoliday.type === 'holiday'
-          });
+        async addHolidays() {
+          const start = this.newHoliday.startDate;
+          const end = this.newHoliday.endDate || start;
+          if (!start) return;
+          if (start > end) { alert('结束日期不能早于开始日期'); return; }
+          const isWorkday = this.newHoliday.type === 'workday';
+          const name = this.newHoliday.name || (isWorkday ? '调休上班' : '假期');
+          const startDate = new Date(start + 'T00:00:00');
+          const endDate = new Date(end + 'T00:00:00');
+          const records = [];
+          for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            const dateStr = d.toISOString().slice(0, 10);
+            records.push({ date: dateStr, name, isWorkday, isHoliday: !isWorkday });
+          }
+          await Store.bulkPut('holidays', records);
           this.holidays = await Store.getAll('holidays');
-          this.newHoliday = { date: '', name: '', type: 'holiday' };
+          this.newHoliday = { startDate: '', endDate: '', name: '', type: 'holiday' };
         },
         async deleteHoliday(id) {
           await Store.deleteByKey('holidays', id);
           this.holidays = await Store.getAll('holidays');
+        },
+        async resetDB() {
+          if (!confirm('确定要清空所有导入数据和考勤结果吗？此操作不可恢复。')) return;
+          this.resetting = true;
+          this.resetDone = false;
+          try {
+            await Store.resetAllData();
+            this.resetDone = true;
+            this.holidays = [];
+          } catch (err) {
+            alert('重置失败: ' + err.message);
+          }
+          this.resetting = false;
         }
       }
     }).mount('#app');
