@@ -255,14 +255,16 @@ const Excel = {
 
       case 'travel':
         const travelDate = clean['出差起止日期'] || '';
-        const dateParts = travelDate.split(/[-~至到]/);
+        const travelDateParts = travelDate.split(/[~至到]/).filter(Boolean);
+        const travelStart = travelDateParts[0] || '';
+        const travelEnd = travelDateParts[1] || travelStart;
         return {
           applicant: clean['申请人'] || '',
           department: clean['申请部门'] || '',
           destination: clean['目的地'] || '',
           travelers: clean['出差人员'] || '',
-          startDate: this._formatDate(dateParts[0]),
-          endDate: this._formatDate(dateParts[1]) || this._formatDate(dateParts[0]),
+          startDate: this._formatDate(travelStart),
+          endDate: this._formatDate(travelEnd),
           travelType: clean['出差类型'] || '',
           reason: clean['出差事由'] || ''
         };
