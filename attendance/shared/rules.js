@@ -152,19 +152,6 @@ const RulesEngine = {
         let travelHours = 0;
         let isRestDay = false;
 
-        if (!isWorkDay) {
-          isRestDay = true;
-          if (hasRealPunch) {
-            if (dayOvertimeRecords.length > 0) {
-              status = 'overtime';
-            } else {
-              status = 'suspect_ot';
-            }
-          } else {
-            status = 'rest';
-          }
-        }
-
         const dayMissRecords = missPunchRecords.filter(m =>
           (m.missDate === dateStr) &&
           (m.applicant === employeeName || m.missPerson === employeeName)
@@ -186,6 +173,19 @@ const RulesEngine = {
           return o.applicant === employeeName && oDate === dateStr;
         });
         const overtimeRecord = dayOvertimeRecords[0] || null;
+
+        if (!isWorkDay) {
+          isRestDay = true;
+          if (hasRealPunch) {
+            if (dayOvertimeRecords.length > 0) {
+              status = 'overtime';
+            } else {
+              status = 'suspect_ot';
+            }
+          } else {
+            status = 'rest';
+          }
+        }
 
         // Sum all overtime hours from matching records
         for (const o of dayOvertimeRecords) {
