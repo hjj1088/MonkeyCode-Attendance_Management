@@ -163,8 +163,8 @@
         <div v-if="detail.sourceTravels && detail.sourceTravels.length" class="mb-4">
           <h4 class="font-semibold mb-2">关联出差记录</h4>
           <table class="w-full text-sm border">
-            <thead><tr class="bg-gray-50"><th class="p-1 border">开始</th><th class="p-1 border">结束</th><th class="p-1 border">事由</th></tr></thead>
-            <tbody><tr v-for="t in detail.sourceTravels" :key="t.id"><td class="p-1 border">{{ t.startDate }}</td><td class="p-1 border">{{ t.endDate }}</td><td class="p-1 border">{{ t.reason }}</td></tr></tbody>
+            <thead><tr class="bg-gray-50"><th class="p-1 border">开始</th><th class="p-1 border">结束</th><th class="p-1 border">目的地</th><th class="p-1 border">事由</th></tr></thead>
+            <tbody><tr v-for="t in detail.sourceTravels" :key="t.id"><td class="p-1 border">{{ t.startDate }}</td><td class="p-1 border">{{ t.endDate }}</td><td class="p-1 border">{{ t.destination }}</td><td class="p-1 border">{{ t.reason }}</td></tr></tbody>
           </table>
         </div>
         <div v-if="detail.sourceMisses && detail.sourceMisses.length" class="mb-4">

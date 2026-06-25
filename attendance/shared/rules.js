@@ -18,6 +18,19 @@ const RulesEngine = {
     return Store.getAll('holidays');
   },
 
+  _trimName(n) { return (n || '').replace(/\s+/g, ''); },
+
+  _matchOA(oaRecords, employeeName, dateStr, dateStartField, dateEndField) {
+    const name = this._trimName(employeeName);
+    return oaRecords.filter(r => {
+      if (this._trimName(r.applicant) !== name) return false;
+      const start = r[dateStartField] || r.startDate || '';
+      const end = r[dateEndField] || start;
+      if (!start) return false;
+      return dateStr >= start && dateStr <= end;
+    });
+  },
+
   _timeToMinutes(timeStr) {
     if (!timeStr) return null;
     const parts = String(timeStr).split(':');
@@ -154,23 +167,20 @@ const RulesEngine = {
 
         const dayMissRecords = missPunchRecords.filter(m =>
           (m.missDate === dateStr) &&
-          (m.applicant === employeeName || m.missPerson === employeeName)
+          (this._trimName(m.applicant) === this._trimName(employeeName) ||
+           this._trimName(m.missPerson) === this._trimName(employeeName))
         );
         const missRecord = dayMissRecords[0] || null;
 
-        const dayLeaveRecords = leaveRecords.filter(l =>
-          l.applicant === employeeName && dateStr >= l.startDate && dateStr <= l.endDate
-        );
+        const dayLeaveRecords = this._matchOA(leaveRecords, employeeName, dateStr, 'startDate', 'endDate');
         const leaveRecord = dayLeaveRecords[0] || null;
 
-        const dayTravelRecords = travelRecords.filter(t =>
-          t.applicant === employeeName && dateStr >= t.startDate && dateStr <= t.endDate
-        );
+        const dayTravelRecords = this._matchOA(travelRecords, employeeName, dateStr, 'startDate', 'endDate');
         const travelRecord = dayTravelRecords[0] || null;
 
         const dayOvertimeRecords = overtimeRecords.filter(o => {
           const oDate = (o.startTime || '').substring(0, 10);
-          return o.applicant === employeeName && oDate === dateStr;
+          return this._trimName(o.applicant) === this._trimName(employeeName) && oDate === dateStr;
         });
         const overtimeRecord = dayOvertimeRecords[0] || null;
 
