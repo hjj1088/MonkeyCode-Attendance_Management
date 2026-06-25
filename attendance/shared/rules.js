@@ -134,7 +134,7 @@ const RulesEngine = {
         for (const p of dayPunches) {
           if (p.signIn && (!firstSignIn || p.signIn < firstSignIn)) firstSignIn = p.signIn;
           if (p.signOut && (!lastSignOut || p.signOut > lastSignOut)) lastSignOut = p.signOut;
-          totalOvertime += p.overtimeHours || 0;
+          if (isWorkDay) totalOvertime += p.overtimeHours || 0;
           const dev = this._calcDeviation(p.signIn, p.signOut, config);
           totalLate += dev.lateMinutes;
           totalEarly += dev.earlyMinutes;
@@ -153,8 +153,16 @@ const RulesEngine = {
         let isRestDay = false;
 
         if (!isWorkDay) {
-          status = 'rest';
           isRestDay = true;
+          if (hasRealPunch) {
+            if (dayOvertimeRecords.length > 0) {
+              status = 'overtime';
+            } else {
+              status = 'suspect_ot';
+            }
+          } else {
+            status = 'rest';
+          }
         }
 
         const dayMissRecords = missPunchRecords.filter(m =>

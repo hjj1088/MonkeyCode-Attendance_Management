@@ -12,6 +12,8 @@
     .status-rest { background: #f3f4f6; color: #6b7280; }
     .status-leave { background: #dbeafe; color: #1e40af; }
     .status-travel { background: #f3e8ff; color: #6b21a8; }
+    .status-overtime { background: #fce7f3; color: #9d174d; }
+    .status-suspect_ot { background: #fef3c7; color: #92400e; }
     .cal-cell { min-height: 80px; transition: all 0.15s; }
     .cal-cell:hover { transform: scale(1.02); z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
   </style>
@@ -46,6 +48,8 @@
         <option value="leave">请假</option>
         <option value="travel">出差</option>
         <option value="absent">缺勤</option>
+        <option value="overtime">加班</option>
+        <option value="suspect_ot">疑似加班</option>
       </select>
       <input v-model="searchName" type="text" placeholder="搜索姓名" class="px-3 py-1 border rounded text-sm w-32">
     </div>
@@ -182,11 +186,11 @@
     </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.14"></script>
-  <script src="./lib/dexie.min.js?v=1.0.14"></script>
-  <script src="./shared/auth.js?v=1.0.14"></script>
-  <script src="./shared/db.js?v=1.0.14"></script>
-  <script src="./shared/rules.js?v=1.0.14"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.15"></script>
+  <script src="./lib/dexie.min.js?v=1.0.15"></script>
+  <script src="./shared/auth.js?v=1.0.15"></script>
+  <script src="./shared/db.js?v=1.0.15"></script>
+  <script src="./shared/rules.js?v=1.0.15"></script>
   <script>
     Auth.requireAuth();
 
@@ -244,11 +248,11 @@
       },
       methods: {
         statusLabel(s) {
-          const map = { normal: '正常', rest: '休息', abnormal: '迟到', leave: '请假', travel: '出差', absent: '缺勤' };
+          const map = { normal: '正常', rest: '休息', abnormal: '迟到', leave: '请假', travel: '出差', absent: '缺勤', overtime: '加班', suspect_ot: '疑似加班' };
           return map[s] || s;
         },
         statusCellClass(s) {
-          const map = { normal: 'px-2 py-0.5 rounded text-xs status-normal', rest: 'px-2 py-0.5 rounded text-xs status-rest', abnormal: 'px-2 py-0.5 rounded text-xs status-abnormal', leave: 'px-2 py-0.5 rounded text-xs status-leave', travel: 'px-2 py-0.5 rounded text-xs status-travel', absent: 'px-2 py-0.5 rounded text-xs status-absent' };
+          const map = { normal: 'px-2 py-0.5 rounded text-xs status-normal', rest: 'px-2 py-0.5 rounded text-xs status-rest', abnormal: 'px-2 py-0.5 rounded text-xs status-abnormal', leave: 'px-2 py-0.5 rounded text-xs status-leave', travel: 'px-2 py-0.5 rounded text-xs status-travel', absent: 'px-2 py-0.5 rounded text-xs status-absent', overtime: 'px-2 py-0.5 rounded text-xs status-overtime', suspect_ot: 'px-2 py-0.5 rounded text-xs status-suspect_ot' };
           return map[s] || '';
         },
         remarkText(r) {
@@ -257,7 +261,9 @@
           else if (r.sourceLeaveIds && r.sourceLeaveIds.length > 0) { parts.push('请假'); }
           if (r.travelHours > 0 || (r.sourceTravelIds && r.sourceTravelIds.length > 0)) { parts.push('出差'); }
           if (r.overtimeHours > 0 && r.status !== 'leave' && r.status !== 'travel') { parts.push('加班' + r.overtimeHours + 'h'); }
+          else if (r.status === 'overtime') { parts.push('加班' + (r.overtimeHours || '') + 'h'); }
           else if (r.sourceOvertimeIds && r.sourceOvertimeIds.length > 0) { parts.push('有加班'); }
+          if (r.status === 'suspect_ot') { parts.push('疑似加班'); }
           const hasMiss = r.sourceMissIds && r.sourceMissIds.length > 0;
           if (hasMiss) parts.push('补卡');
           if (r.absent) parts.push('缺勤');
@@ -380,6 +386,8 @@
               else if (firstRecord.status === 'leave') statusClass = 'bg-blue-50 border-blue-300';
               else if (firstRecord.status === 'travel') statusClass = 'bg-purple-50 border-purple-300';
               else if (firstRecord.status === 'absent') statusClass = 'bg-red-50 border-red-300';
+              else if (firstRecord.status === 'overtime') statusClass = 'bg-pink-50 border-pink-300';
+              else if (firstRecord.status === 'suspect_ot') statusClass = 'bg-amber-50 border-amber-300';
             } else if (isRest) {
               statusClass = 'bg-gray-100 border-gray-300';
             }
