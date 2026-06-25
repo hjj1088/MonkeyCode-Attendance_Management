@@ -140,6 +140,8 @@ const RulesEngine = {
           totalEarly += dev.earlyMinutes;
         }
 
+        const hasRealPunch = !!firstSignIn || !!lastSignOut;
+
         let status = 'normal';
         let absent = false;
         let adjustedLateMinutes = totalLate;
@@ -182,8 +184,7 @@ const RulesEngine = {
           adjustedOvertime += o.overtimeHours || 0;
         }
 
-        if (leaveRecord && (!dayPunches.length || leaveRecord.leaveDays >= 1)) {
-          status = 'leave';
+        if (leaveRecord) {
           leaveType = leaveRecord.leaveType;
           for (const l of dayLeaveRecords) {
             leaveHours += l.leaveHours || (l.leaveDays * 8) || 0;
@@ -191,23 +192,26 @@ const RulesEngine = {
               adjustedOvertime -= l.leaveHours || 0;
             }
           }
+          if (!hasRealPunch || leaveRecord.leaveDays >= 1) {
+            status = 'leave';
+          }
         }
 
         if (travelRecord) {
-          status = 'travel';
           travelHours = 8;
+          if (!hasRealPunch) status = 'travel';
         }
 
         if (missRecord) {
           status = 'normal';
         }
 
-        if (isWorkDay && dayPunches.length === 0 && !leaveRecord && !travelRecord && !missRecord) {
+        if (isWorkDay && !hasRealPunch && !leaveRecord && !travelRecord && !missRecord) {
           status = 'absent';
           absent = true;
         }
 
-        if (totalLate > 0 && dayPunches.length > 0 && status !== 'leave' && status !== 'travel') {
+        if (totalLate > 0 && hasRealPunch && status !== 'leave' && status !== 'travel') {
           lateRecords.push({ date: dateStr, minutes: totalLate });
           status = 'abnormal';
         }
