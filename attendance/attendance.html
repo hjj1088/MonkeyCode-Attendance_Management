@@ -55,6 +55,10 @@
       <button @click="runCalculation" class="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700 transition">重新计算</button>
     </div>
 
+    <div v-if="scheduleMissing" class="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+      未找到{{ currentMonth }}排班数据，所有日期默认视为上班日。请前往 <a href="import.html" class="text-red-700 font-bold underline">数据导入</a> 上传排班表。
+    </div>
+
     <div v-if="viewMode === 'list'" class="bg-white rounded-lg shadow overflow-hidden">
       <table class="w-full text-sm">
         <thead>
@@ -98,17 +102,26 @@
     </div>
 
     <div v-if="viewMode === 'calendar'" class="bg-white rounded-lg shadow p-4">
+      <div class="flex items-center gap-4 mb-3">
+        <span class="text-sm text-gray-600">当前员工:</span>
+        <select v-model="calEmployee" @change="buildCalendar" class="px-3 py-1 border rounded text-sm w-48">
+          <option value="">-- 全部 --</option>
+          <option v-for="emp in calendarEmployees" :key="emp.employeeNo" :value="emp.employeeNo">{{ emp.name }} ({{ emp.employeeNo }})</option>
+        </select>
+        <span v-if="calEmployee && calEmployeeInfo" class="text-sm text-gray-500">{{ calEmployeeInfo.department }}</span>
+      </div>
       <div class="grid grid-cols-7 gap-1 mb-2">
         <div v-for="day in ['一','二','三','四','五','六','日']" :key="day" class="text-center text-sm font-medium text-gray-600 py-1">{{ day }}</div>
       </div>
       <div class="grid grid-cols-7 gap-1">
-        <div v-for="cell in calendarCells" :key="cell.key" class="cal-cell border rounded p-1 text-xs" :class="cell.statusClass">
+        <div v-for="cell in calendarCells" :key="cell.key" class="cal-cell border rounded p-1 text-xs" :class="cell.statusClass" @click="cell.record && showDetail(cell.record)">
           <div class="font-bold">{{ cell.day }}</div>
           <div v-if="cell.record" class="mt-1">
-            <div>{{ cell.record.signIn || '--' }} / {{ cell.record.signOut || '--' }}</div>
-            <div v-if="cell.record.status !== 'normal'" class="font-semibold">{{ statusLabel(cell.record.status) }}</div>
+            <div class="text-xs text-gray-500">{{ cell.record.signIn || '--' }} / {{ cell.record.signOut || '--' }}</div>
+            <div v-if="cell.record.isRestDay" class="text-gray-400 text-xs mt-0.5">休息日</div>
+            <div v-if="cell.record.status !== 'normal' && cell.record.status !== 'rest'" class="font-semibold text-xs mt-0.5">{{ statusLabel(cell.record.status) }}</div>
           </div>
-          <div v-if="!cell.record && cell.isRest" class="text-gray-400 mt-1">休息</div>
+          <div v-if="!cell.record && cell.isRest" class="text-gray-400 mt-1 text-xs">休息</div>
         </div>
       </div>
     </div>
@@ -169,11 +182,11 @@
     </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.10"></script>
-  <script src="./lib/dexie.min.js?v=1.0.10"></script>
-  <script src="./shared/auth.js?v=1.0.10"></script>
-  <script src="./shared/db.js?v=1.0.10"></script>
-  <script src="./shared/rules.js?v=1.0.10"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.11"></script>
+  <script src="./lib/dexie.min.js?v=1.0.11"></script>
+  <script src="./shared/auth.js?v=1.0.11"></script>
+  <script src="./shared/db.js?v=1.0.11"></script>
+  <script src="./shared/rules.js?v=1.0.11"></script>
   <script>
     Auth.requireAuth();
 
@@ -184,6 +197,7 @@
           viewMode: 'list',
           calculating: false,
           configChanged: false,
+          scheduleMissing: false,
           currentMonth: '',
           filterDept: '',
           filterStatus: '',
@@ -191,7 +205,9 @@
           results: [],
           detail: null,
           departments: [],
-          calendarCells: []
+          calendarCells: [],
+          calEmployee: '',
+          calendarEmployees: []
         };
       },
       computed: {
@@ -212,6 +228,11 @@
           });
           return list;
         },
+        calEmployeeInfo() {
+          if (!this.calEmployee) return null;
+          const r = this.results.find(r => r.employeeNo === this.calEmployee);
+          return r ? { name: r.name, department: r.department } : null;
+        }
       },
       async created() {
         this.currentMonth = await this.detectDataMonth();
@@ -234,8 +255,11 @@
           const parts = [];
           if (r.leaveType) parts.push(r.leaveType);
           if (r.travelHours > 0 && !r.leaveType) parts.push('出差');
+          if (r.overtimeHours > 0 && r.status !== 'leave' && r.status !== 'travel') parts.push('加班' + r.overtimeHours + 'h');
+          const hasMiss = r.sourceMissIds && r.sourceMissIds.length > 0;
+          if (hasMiss) parts.push('补卡');
           if (r.absent) parts.push('缺勤');
-          return parts.join(', ');
+          return parts.join(' / ');
         },
         async detectDataMonth() {
           const punches = await Store.getAll('punch_records');
@@ -268,7 +292,15 @@
               }
             }
           }
+          const [y, m] = this.currentMonth.split('-').map(Number);
+          const schedCount = await DB.schedules.where('[employeeNo+year+month]').between([0, y, m], ['\uffff', y, m], true, true).count();
+          this.scheduleMissing = schedCount === 0 && this.results.length > 0;
           if (this.viewMode === 'calendar') await this.buildCalendar();
+          const empSet = new Map();
+          for (const r of this.results) {
+            if (!empSet.has(r.employeeNo)) empSet.set(r.employeeNo, { employeeNo: r.employeeNo, name: r.name, department: r.department });
+          }
+          this.calendarEmployees = [...empSet.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
           const depts = new Set(this.results.map(r => r.department).filter(Boolean));
           this.departments = [...depts].sort();
         },
@@ -291,33 +323,51 @@
           const startDow = firstDay.getDay() || 7;
           const cells = [];
 
-          const allSchedules = await Store.getByIndex('schedules', 'year', y);
-          const scheduleMap = {};
-          for (const s of allSchedules) {
-            if (s.month !== m) continue;
-            if (!scheduleMap[s.employeeNo]) scheduleMap[s.employeeNo] = s;
+          let scheduleMap = {};
+          if (this.calEmployee) {
+            const allSchedules = await Store.getByIndex('schedules', 'year', y);
+            for (const s of allSchedules) {
+              if (s.month !== m) continue;
+              if (s.employeeNo === this.calEmployee) {
+                scheduleMap[this.calEmployee] = s;
+                break;
+              }
+            }
+          } else {
+            const allSchedules = await Store.getByIndex('schedules', 'year', y);
+            for (const s of allSchedules) {
+              if (s.month !== m) continue;
+              if (!scheduleMap[s.employeeNo]) scheduleMap[s.employeeNo] = s;
+            }
           }
-
-          const employeeNos = [...new Set(this.results.map(r => r.employeeNo))];
 
           for (let i = 1; i < startDow; i++) {
             cells.push({ key: 'prev-' + i, day: '', isRest: false, record: null, statusClass: 'bg-gray-50' });
           }
           for (let d = 1; d <= lastDate; d++) {
             const dateStr = `${this.currentMonth}-${String(d).padStart(2, '0')}`;
-            const dayRecords = this.results.filter(r => r.date === dateStr);
+            const dayRecords = this.results.filter(r => {
+              if (this.calEmployee && r.employeeNo !== this.calEmployee) return false;
+              return r.date === dateStr;
+            });
             const day = String(d).padStart(2, '0');
 
-            let allRest = true;
-            let hasSchedule = false;
-            for (const eno of employeeNos) {
-              const sch = scheduleMap[eno];
+            let isRest = false;
+            if (this.calEmployee) {
+              const sch = scheduleMap[this.calEmployee];
               if (sch && sch.workDays) {
-                hasSchedule = true;
-                if (sch.workDays[day]) allRest = false;
+                isRest = sch.workDays[day] !== true;
               }
+            } else {
+              const employeeNos = [...new Set(this.results.map(r => r.employeeNo))];
+              let allRest = true;
+              let hasSchedule = false;
+              for (const eno of employeeNos) {
+                const sch = scheduleMap[eno];
+                if (sch && sch.workDays) { hasSchedule = true; if (sch.workDays[day]) allRest = false; }
+              }
+              isRest = hasSchedule && allRest;
             }
-            if (!hasSchedule) allRest = false;
 
             let statusClass = 'bg-white';
             const firstRecord = dayRecords[0];
@@ -328,11 +378,11 @@
               else if (firstRecord.status === 'leave') statusClass = 'bg-blue-50 border-blue-300';
               else if (firstRecord.status === 'travel') statusClass = 'bg-purple-50 border-purple-300';
               else if (firstRecord.status === 'absent') statusClass = 'bg-red-50 border-red-300';
-            } else if (allRest) {
+            } else if (isRest) {
               statusClass = 'bg-gray-100 border-gray-300';
             }
 
-            cells.push({ key: dateStr, day: d, isRest: allRest && !firstRecord, record: firstRecord || null, statusClass });
+            cells.push({ key: dateStr, day: d, isRest, record: firstRecord || null, statusClass });
           }
           this.calendarCells = cells;
         },
