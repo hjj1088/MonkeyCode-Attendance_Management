@@ -97,10 +97,10 @@
     </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.10"></script>
-  <script src="./lib/dexie.min.js?v=1.0.10"></script>
-  <script src="./shared/auth.js?v=1.0.10"></script>
-  <script src="./shared/db.js?v=1.0.10"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.12"></script>
+  <script src="./lib/dexie.min.js?v=1.0.12"></script>
+  <script src="./shared/auth.js?v=1.0.12"></script>
+  <script src="./shared/db.js?v=1.0.12"></script>
   <script>
     Auth.requireAuth();
 
@@ -152,11 +152,13 @@
             records.push({ date: dateStr, name, isWorkday, isHoliday: !isWorkday });
           }
           await Store.bulkPut('holidays', records);
+          await Store.put('settings', { key: 'config_updated_at', value: Date.now() });
           this.holidays = await Store.getAll('holidays');
           this.newHoliday = { startDate: '', endDate: '', name: '', type: 'holiday' };
         },
         async deleteHoliday(id) {
           await Store.deleteByKey('holidays', id);
+          await Store.put('settings', { key: 'config_updated_at', value: Date.now() });
           this.holidays = await Store.getAll('holidays');
         },
         async resetDB() {

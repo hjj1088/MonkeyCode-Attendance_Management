@@ -76,8 +76,10 @@ const RulesEngine = {
     const endDate = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
 
     const punchRecords = await Store.getByRange('punch_records', 'date', startDate, endDate);
-    const leaveRecords = await Store.getByRange('leave_records', 'startDate', startDate, endDate);
-    const travelRecords = await Store.getByRange('travel_records', 'startDate', startDate, endDate);
+    const allLeaveRecords = await Store.getAll('leave_records');
+    const leaveRecords = allLeaveRecords.filter(l => l.endDate >= startDate && l.startDate <= endDate);
+    const allTravelRecords = await Store.getAll('travel_records');
+    const travelRecords = allTravelRecords.filter(t => t.endDate >= startDate && t.startDate <= endDate);
     const missPunchRecords = await Store.getByRange('miss_punch_records', 'missDate', startDate, endDate);
     const allOvertimeRecords = await Store.getAll('overtime_records');
     const overtimeRecords = allOvertimeRecords.filter(o => {

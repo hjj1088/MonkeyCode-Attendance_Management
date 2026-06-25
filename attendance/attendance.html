@@ -182,11 +182,11 @@
     </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.11"></script>
-  <script src="./lib/dexie.min.js?v=1.0.11"></script>
-  <script src="./shared/auth.js?v=1.0.11"></script>
-  <script src="./shared/db.js?v=1.0.11"></script>
-  <script src="./shared/rules.js?v=1.0.11"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.12"></script>
+  <script src="./lib/dexie.min.js?v=1.0.12"></script>
+  <script src="./shared/auth.js?v=1.0.12"></script>
+  <script src="./shared/db.js?v=1.0.12"></script>
+  <script src="./shared/rules.js?v=1.0.12"></script>
   <script>
     Auth.requireAuth();
 
@@ -253,9 +253,11 @@
         },
         remarkText(r) {
           const parts = [];
-          if (r.leaveType) parts.push(r.leaveType);
-          if (r.travelHours > 0 && !r.leaveType) parts.push('出差');
-          if (r.overtimeHours > 0 && r.status !== 'leave' && r.status !== 'travel') parts.push('加班' + r.overtimeHours + 'h');
+          if (r.leaveType) { parts.push(r.leaveType); }
+          else if (r.sourceLeaveIds && r.sourceLeaveIds.length > 0) { parts.push('请假'); }
+          if (r.travelHours > 0 || (r.sourceTravelIds && r.sourceTravelIds.length > 0)) { parts.push('出差'); }
+          if (r.overtimeHours > 0 && r.status !== 'leave' && r.status !== 'travel') { parts.push('加班' + r.overtimeHours + 'h'); }
+          else if (r.sourceOvertimeIds && r.sourceOvertimeIds.length > 0) { parts.push('有加班'); }
           const hasMiss = r.sourceMissIds && r.sourceMissIds.length > 0;
           if (hasMiss) parts.push('补卡');
           if (r.absent) parts.push('缺勤');

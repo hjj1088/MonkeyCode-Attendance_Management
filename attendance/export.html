@@ -51,11 +51,11 @@
               <option v-for="m in availableMonths" :key="m" :value="m">{{ m }}</option>
             </select>
             <button @click="doExport" class="px-4 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition">导出 Excel</button>
-            <button @click="doCalendarExport" :disabled="!exportMonth" class="px-4 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 transition" title="按日历月报格式导出">导出考勤月报</button>
+            <button @click="doCalendarExport" :disabled="!exportMonth" class="px-4 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 transition" title="按日历月报格式导出">导出考勤明细</button>
           </div>
-          <div class="mt-2 text-xs text-gray-400">
-            考勤月报：日历格式，每个员工一列，每天两行（上午/下午），含排班和OA标注
-          </div>
+            <div class="mt-2 text-xs text-gray-400">
+              考勤明细：日历格式，每个员工一列，每天两行（上午/下午），含排班和OA标注
+            </div>
         </div>
       </div>
 
@@ -84,12 +84,12 @@
     </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.9"></script>
-  <script src="./lib/dexie.min.js?v=1.0.9"></script>
-  <script src="./lib/xlsx.full.min.js?v=1.0.9"></script>
-  <script src="./shared/auth.js?v=1.0.9"></script>
-  <script src="./shared/db.js?v=1.0.9"></script>
-  <script src="./shared/excel.js?v=1.0.9"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.12"></script>
+  <script src="./lib/dexie.min.js?v=1.0.12"></script>
+  <script src="./lib/xlsx.full.min.js?v=1.0.12"></script>
+  <script src="./shared/auth.js?v=1.0.12"></script>
+  <script src="./shared/db.js?v=1.0.12"></script>
+  <script src="./shared/excel.js?v=1.0.12"></script>
   <script>
     Auth.requireAuth();
 

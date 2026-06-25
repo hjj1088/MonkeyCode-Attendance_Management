@@ -354,7 +354,7 @@ const Excel = {
     }
 
     const dateToSerial = (year, month, day) => {
-      return Math.round((Date.UTC(year, month - 1, day) - Date.UTC(1899, 11, 31)) / 86400000);
+      return month + '月' + day + '日';
     };
 
     const headerRow1 = ['日期', '排班', '打卡时间'];
