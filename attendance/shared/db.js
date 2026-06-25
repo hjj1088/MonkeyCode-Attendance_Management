@@ -123,6 +123,8 @@ async function initDefaultSettings() {
         { label: '早退时间', field: 'earlyMinutes' },
         { label: '加班时间', field: 'overtimeHours' },
         { label: '出差时间', field: 'travelHours' },
+        { label: '请假类型', field: 'leaveType' },
+        { label: '请假小时', field: 'leaveHours' },
         { label: '是否旷工', field: 'absent' }
       ]
     });

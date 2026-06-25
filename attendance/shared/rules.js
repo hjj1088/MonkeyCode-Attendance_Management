@@ -146,6 +146,7 @@ const RulesEngine = {
         let adjustedEarlyMinutes = totalEarly;
         let adjustedOvertime = totalOvertime;
         let leaveType = '';
+        let leaveHours = 0;
         let travelHours = 0;
         let isRestDay = false;
 
@@ -154,33 +155,41 @@ const RulesEngine = {
           isRestDay = true;
         }
 
-        const missRecord = missPunchRecords.find(m =>
+        const dayMissRecords = missPunchRecords.filter(m =>
           (m.missDate === dateStr) &&
           (m.applicant === employeeName || m.missPerson === employeeName)
         );
+        const missRecord = dayMissRecords[0] || null;
 
-        const leaveRecord = leaveRecords.find(l =>
+        const dayLeaveRecords = leaveRecords.filter(l =>
           l.applicant === employeeName && dateStr >= l.startDate && dateStr <= l.endDate
         );
+        const leaveRecord = dayLeaveRecords[0] || null;
 
-        const travelRecord = travelRecords.find(t =>
+        const dayTravelRecords = travelRecords.filter(t =>
           t.applicant === employeeName && dateStr >= t.startDate && dateStr <= t.endDate
         );
+        const travelRecord = dayTravelRecords[0] || null;
 
-        const overtimeRecord = overtimeRecords.find(o => {
+        const dayOvertimeRecords = overtimeRecords.filter(o => {
           const oDate = (o.startTime || '').substring(0, 10);
           return o.applicant === employeeName && oDate === dateStr;
         });
+        const overtimeRecord = dayOvertimeRecords[0] || null;
 
-        if (overtimeRecord) {
-          adjustedOvertime += overtimeRecord.overtimeHours || 0;
+        // Sum all overtime hours from matching records
+        for (const o of dayOvertimeRecords) {
+          adjustedOvertime += o.overtimeHours || 0;
         }
 
         if (leaveRecord && (!dayPunches.length || leaveRecord.leaveDays >= 1)) {
           status = 'leave';
           leaveType = leaveRecord.leaveType;
-          if (leaveRecord.leaveType && leaveRecord.leaveType.includes('调休')) {
-            adjustedOvertime -= leaveRecord.leaveHours || 0;
+          for (const l of dayLeaveRecords) {
+            leaveHours += l.leaveHours || (l.leaveDays * 8) || 0;
+            if (l.leaveType && l.leaveType.includes('调休')) {
+              adjustedOvertime -= l.leaveHours || 0;
+            }
           }
         }
 
@@ -217,16 +226,17 @@ const RulesEngine = {
           earlyMinutes: adjustedEarlyMinutes,
           overtimeHours: adjustedOvertime,
           travelHours,
+          leaveHours,
           absent,
           status,
           leaveType,
           isRestDay,
           month: targetMonth,
           sourcePunchIds: dayPunches.map(p => p.id).filter(Boolean),
-          sourceLeaveIds: leaveRecord ? [leaveRecord.id] : [],
-          sourceTravelIds: travelRecord ? [travelRecord.id] : [],
-          sourceMissIds: missRecord ? [missRecord.id] : [],
-          sourceOvertimeIds: overtimeRecord ? [overtimeRecord.id] : []
+          sourceLeaveIds: dayLeaveRecords.map(l => l.id).filter(Boolean),
+          sourceTravelIds: dayTravelRecords.map(t => t.id).filter(Boolean),
+          sourceMissIds: dayMissRecords.map(m => m.id).filter(Boolean),
+          sourceOvertimeIds: dayOvertimeRecords.map(o => o.id).filter(Boolean)
         });
       }
 

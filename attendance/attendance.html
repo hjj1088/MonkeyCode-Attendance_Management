@@ -138,7 +138,7 @@
           <div><span class="text-gray-500">早退:</span> {{ detail.earlyMinutes }}min</div>
           <div><span class="text-gray-500">加班:</span> {{ detail.overtimeHours }}h</div>
           <div><span class="text-gray-500">出差:</span> {{ detail.travelHours }}h</div>
-          <div><span class="text-gray-500">请假类型:</span> {{ detail.leaveType || '--' }}</div>
+          <div><span class="text-gray-500">请假类型:</span> {{ detail.leaveType || '--' }} <span v-if="detail.leaveHours">({{ detail.leaveHours }}h)</span></div>
           <div><span class="text-gray-500">状态:</span> <span :class="statusCellClass(detail.status)">{{ statusLabel(detail.status) }}</span></div>
           <div><span class="text-gray-500">排班:</span> {{ detail.isRestDay ? '休息' : '上班' }}</div>
         </div>
@@ -182,11 +182,11 @@
     </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.12"></script>
-  <script src="./lib/dexie.min.js?v=1.0.12"></script>
-  <script src="./shared/auth.js?v=1.0.12"></script>
-  <script src="./shared/db.js?v=1.0.12"></script>
-  <script src="./shared/rules.js?v=1.0.12"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.13"></script>
+  <script src="./lib/dexie.min.js?v=1.0.13"></script>
+  <script src="./shared/auth.js?v=1.0.13"></script>
+  <script src="./shared/db.js?v=1.0.13"></script>
+  <script src="./shared/rules.js?v=1.0.13"></script>
   <script>
     Auth.requireAuth();
 
@@ -253,7 +253,7 @@
         },
         remarkText(r) {
           const parts = [];
-          if (r.leaveType) { parts.push(r.leaveType); }
+          if (r.leaveType) { parts.push(r.leaveType + (r.leaveHours ? r.leaveHours + 'h' : '')); }
           else if (r.sourceLeaveIds && r.sourceLeaveIds.length > 0) { parts.push('请假'); }
           if (r.travelHours > 0 || (r.sourceTravelIds && r.sourceTravelIds.length > 0)) { parts.push('出差'); }
           if (r.overtimeHours > 0 && r.status !== 'leave' && r.status !== 'travel') { parts.push('加班' + r.overtimeHours + 'h'); }
@@ -261,7 +261,7 @@
           const hasMiss = r.sourceMissIds && r.sourceMissIds.length > 0;
           if (hasMiss) parts.push('补卡');
           if (r.absent) parts.push('缺勤');
-          return parts.join(' / ');
+          return parts.join('/');
         },
         async detectDataMonth() {
           const punches = await Store.getAll('punch_records');
