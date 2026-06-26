@@ -122,10 +122,12 @@
           <div class="font-bold">{{ cell.day }}</div>
           <div v-if="cell.record" class="mt-1">
             <div class="text-xs text-gray-500">{{ cell.record.signIn || '--' }} / {{ cell.record.signOut || '--' }}</div>
-            <div v-if="cell.record.isRestDay" class="text-gray-400 text-xs mt-0.5">休息日</div>
+            <div v-if="cell.record.isRestDay && !cell.holidayName" class="text-gray-400 text-xs mt-0.5">休息日</div>
+            <div v-if="cell.holidayName" class="text-red-600 font-semibold text-xs mt-0.5">{{ cell.holidayName }}</div>
             <div v-if="cell.record.status !== 'normal' && cell.record.status !== 'rest'" class="font-semibold text-xs mt-0.5">{{ statusLabel(cell.record.status) }}</div>
           </div>
-          <div v-if="!cell.record && cell.isRest" class="text-gray-400 mt-1 text-xs">休息</div>
+          <div v-if="!cell.record && cell.holidayName" class="text-red-600 font-semibold mt-1 text-xs">{{ cell.holidayName }}</div>
+          <div v-else-if="!cell.record && cell.isRest" class="text-gray-400 mt-1 text-xs">休息</div>
         </div>
       </div>
     </div>
@@ -349,6 +351,14 @@
             }
           }
 
+          const holidays = await Store.getAll('holidays');
+          const holidayMap = {};
+          for (const h of holidays) {
+            if (h.date && h.date.startsWith(this.currentMonth)) {
+              holidayMap[h.date] = h;
+            }
+          }
+
           for (let i = 1; i < startDow; i++) {
             cells.push({ key: 'prev-' + i, day: '', isRest: false, record: null, statusClass: 'bg-gray-50' });
           }
@@ -361,7 +371,12 @@
             const day = String(d).padStart(2, '0');
 
             let isRest = false;
-            if (this.calEmployee) {
+            let holidayName = null;
+            const holiday = holidayMap[dateStr];
+            if (holiday) {
+              isRest = !holiday.isWorkday;
+              holidayName = holiday.name;
+            } else if (this.calEmployee) {
               const sch = scheduleMap[this.calEmployee];
               if (sch && sch.workDays) {
                 isRest = sch.workDays[day] !== true;
@@ -388,11 +403,13 @@
               else if (firstRecord.status === 'absent') statusClass = 'bg-red-50 border-red-300';
               else if (firstRecord.status === 'overtime') statusClass = 'bg-pink-50 border-pink-300';
               else if (firstRecord.status === 'suspect_ot') statusClass = 'bg-amber-50 border-amber-300';
+            } else if (holidayName) {
+              statusClass = 'bg-red-50 border-red-300';
             } else if (isRest) {
               statusClass = 'bg-gray-100 border-gray-300';
             }
 
-            cells.push({ key: dateStr, day: d, isRest, record: firstRecord || null, statusClass });
+            cells.push({ key: dateStr, day: d, isRest, record: firstRecord || null, statusClass, holidayName });
           }
           this.calendarCells = cells;
         },

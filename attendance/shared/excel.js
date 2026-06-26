@@ -356,11 +356,15 @@ const Excel = {
     const allSchedules = await Store.getByIndex('schedules', 'year', y);
     const scheduleForMonth = allSchedules.filter(s => s.month === m);
 
+    const allHolidays = await Store.getAll('holidays');
+    const holidaysForMonth = allHolidays.filter(h => h.date && h.date.startsWith(targetMonth));
+
     return Excel._apiExport('/api/export/calendar', {
       targetMonth: targetMonth,
       fields: fields || [],
       results: results,
-      schedules: scheduleForMonth
+      schedules: scheduleForMonth,
+      holidays: holidaysForMonth
     }, '考勤明细_' + targetMonth + '.xlsx');
   }
 };

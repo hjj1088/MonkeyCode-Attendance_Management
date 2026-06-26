@@ -52,7 +52,7 @@ def _get_cell_style(val):
     return font, fill
 
 
-def build_calendar_report(target_month, fields, results, schedules):
+def build_calendar_report(target_month, fields, results, schedules, holidays=None):
     """构建日历报表 XLSX"""
     y, m = map(int, target_month.split('-'))
     
@@ -161,14 +161,25 @@ def build_calendar_report(target_month, fields, results, schedules):
     
     current_row = 3
     
+    holiday_map = {}
+    if holidays:
+        for h in holidays:
+            if h.get('date'):
+                holiday_map[h['date']] = h
+    
     for d in range(1, last_day + 1):
         date_str = f'{target_month}-{str(d).zfill(2)}'
         day_num = str(d).zfill(2)
         date_serial = f'{m}月{d}日'
         
-        sched = next((s for s in schedules if s.get('workDays', {}).get(day_num) == True), None)
-        is_rest = (sched is None) and len(schedules) > 0
-        schedule_label = '休息日' if is_rest else '工作日'
+        holiday = holiday_map.get(date_str)
+        if holiday:
+            is_rest = not holiday.get('isWorkday', False)
+            schedule_label = holiday.get('name', '假期')
+        else:
+            sched = next((s for s in schedules if s.get('workDays', {}).get(day_num) == True), None)
+            is_rest = (sched is None) and len(schedules) > 0
+            schedule_label = '休息日' if is_rest else '工作日'
         
         # AM row
         row_am = current_row
@@ -345,8 +356,9 @@ class ExportHandler(http.server.SimpleHTTPRequestHandler):
             fields = data.get('fields', [])
             results = data.get('results', [])
             schedules = data.get('schedules', [])
+            holidays = data.get('holidays', [])
             
-            wb = build_calendar_report(target_month, fields, results, schedules)
+            wb = build_calendar_report(target_month, fields, results, schedules, holidays)
             
             output = io.BytesIO()
             wb.save(output)
