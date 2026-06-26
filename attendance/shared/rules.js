@@ -220,7 +220,7 @@ const RulesEngine = {
           if (!hasRealPunch) status = 'travel';
         }
 
-        if (missRecord) {
+        if (missRecord && isWorkDay) {
           status = 'normal';
         }
 
@@ -229,7 +229,7 @@ const RulesEngine = {
           absent = true;
         }
 
-        if (totalLate > 0 && hasRealPunch && status !== 'leave' && status !== 'travel') {
+        if (totalLate > 0 && hasRealPunch && isWorkDay && status !== 'leave' && status !== 'travel') {
           lateRecords.push({ date: dateStr, minutes: totalLate });
           status = 'abnormal';
         }
