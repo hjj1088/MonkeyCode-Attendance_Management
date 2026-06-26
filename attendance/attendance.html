@@ -87,7 +87,7 @@
             <td class="px-3 py-2">{{ r.name }}</td>
             <td class="px-3 py-2">{{ r.department }}</td>
             <td class="px-3 py-2">{{ r.date }}</td>
-            <td class="px-3 py-2">{{ r.isRestDay ? '休息' : '上班' }}</td>
+            <td class="px-3 py-2">{{ holidayMap[r.date] ? holidayMap[r.date].name : (r.isRestDay ? '休息' : '上班') }}</td>
             <td class="px-3 py-2">{{ r.signIn }}</td>
             <td class="px-3 py-2">{{ r.signOut }}</td>
             <td class="px-3 py-2">{{ r.lateMinutes }}</td>
@@ -213,7 +213,8 @@
           departments: [],
           calendarCells: [],
           calEmployee: '',
-          calendarEmployees: []
+          calendarEmployees: [],
+          holidayMap: {}
         };
       },
       computed: {
@@ -305,6 +306,13 @@
           const [y, m] = this.currentMonth.split('-').map(Number);
           const schedCount = await DB.schedules.where('[employeeNo+year+month]').between([0, y, m], ['\uffff', y, m], true, true).count();
           this.scheduleMissing = schedCount === 0 && this.results.length > 0;
+          const holidays = await Store.getAll('holidays');
+          this.holidayMap = {};
+          for (const h of holidays) {
+            if (h.date && h.date.startsWith(this.currentMonth)) {
+              this.holidayMap[h.date] = h;
+            }
+          }
           if (this.viewMode === 'calendar') await this.buildCalendar();
           const empSet = new Map();
           for (const r of this.results) {
