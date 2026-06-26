@@ -54,7 +54,7 @@
             <button @click="doCalendarExport" :disabled="!exportMonth" class="px-4 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 transition" title="按日历月报格式导出">导出考勤明细</button>
           </div>
             <div class="mt-2 text-xs text-gray-400">
-              考勤明细：日历格式，每个员工一列，每天两行（上午/下午），含排班和OA标注
+              考勤明细：日历格式，按模板字段输出，每个员工一列，每天一行，含排班标注
             </div>
         </div>
       </div>
@@ -84,12 +84,12 @@
     </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.16"></script>
-  <script src="./lib/dexie.min.js?v=1.0.16"></script>
-  <script src="./lib/xlsx.full.min.js?v=1.0.16"></script>
-  <script src="./shared/auth.js?v=1.0.16"></script>
-  <script src="./shared/db.js?v=1.0.16"></script>
-  <script src="./shared/excel.js?v=1.0.16"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.17"></script>
+  <script src="./lib/dexie.min.js?v=1.0.17"></script>
+  <script src="./lib/xlsx.full.min.js?v=1.0.17"></script>
+  <script src="./shared/auth.js?v=1.0.17"></script>
+  <script src="./shared/db.js?v=1.0.17"></script>
+  <script src="./shared/excel.js?v=1.0.17"></script>
   <script>
     Auth.requireAuth();
 
@@ -196,8 +196,12 @@
             alert('请先选择导出月份');
             return;
           }
+          if (this.editingFields.length === 0) {
+            alert('请至少添加一个导出字段');
+            return;
+          }
           try {
-            await Excel.exportCalendarReport(this.exportMonth);
+            await Excel.exportCalendarReport(this.exportMonth, this.editingFields);
           } catch (err) {
             alert('导出失败: ' + err.message);
           }

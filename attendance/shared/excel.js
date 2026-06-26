@@ -330,7 +330,7 @@ const Excel = {
     XLSX.writeFile(wb, filename || 'attendance_export.xlsx');
   },
 
-  async exportCalendarReport(targetMonth) {
+  async exportCalendarReport(targetMonth, fields) {
     const [yearStr, monthStr] = targetMonth.split('-');
     const y = parseInt(yearStr);
     const m = parseInt(monthStr);
@@ -345,9 +345,10 @@ const Excel = {
     const deptEmployees = {};
     const empMap = {};
     for (const r of results) {
-      if (!deptEmployees[r.department]) deptEmployees[r.department] = new Set();
-      deptEmployees[r.department].add(r.employeeNo);
-      if (!empMap[r.employeeNo]) empMap[r.employeeNo] = { name: r.name, department: r.department };
+      const dept = r.department || '未分配';
+      if (!deptEmployees[dept]) deptEmployees[dept] = new Set();
+      deptEmployees[dept].add(r.employeeNo);
+      if (!empMap[r.employeeNo]) empMap[r.employeeNo] = { name: r.name, department: dept };
     }
 
     const deptCols = [];
@@ -355,12 +356,47 @@ const Excel = {
       deptCols.push({ department: dept, employees: [...enoSet].sort() });
     }
 
-    const dateToSerial = (year, month, day) => {
-      return month + '月' + day + '日';
+    const fieldSet = new Set(fields ? fields.map(f => f.field) : []);
+    const useField = (name) => !fields || fieldSet.has(name);
+
+    const buildCell = (r) => {
+      if (!r) return '';
+      const parts = [];
+      if (r.status === 'rest') return '';
+      if (r.status === 'leave') {
+        parts.push('请假');
+        if (useField('leaveType') && r.leaveType) parts.push(r.leaveType);
+        if (useField('leaveHours') && r.leaveHours != null) parts.push(r.leaveHours + 'h');
+        return parts.join('/');
+      }
+      if (r.status === 'travel') {
+        parts.push('出差');
+        if (useField('travelHours') && r.travelHours) parts.push(r.travelHours + 'h');
+        return parts.join('/');
+      }
+      if (r.status === 'absent' || r.absent) return '缺勤';
+      if (r.status === 'overtime') {
+        parts.push('加班');
+        if (useField('overtimeHours') && r.overtimeHours) parts.push(r.overtimeHours + 'h');
+        return parts.join('/');
+      }
+      if (r.status === 'suspect_ot') {
+        parts.push('加班');
+        if (useField('overtimeHours') && r.overtimeHours) parts.push(r.overtimeHours + 'h');
+        return parts.join('/');
+      }
+      if (useField('signIn') && r.signIn) parts.push(r.signIn);
+      if (useField('signOut') && r.signOut) parts.push(r.signOut);
+      if (useField('lateMinutes') && r.lateMinutes > 0) parts.push('迟' + r.lateMinutes + 'min');
+      if (useField('earlyMinutes') && r.earlyMinutes > 0) parts.push('早' + r.earlyMinutes + 'min');
+      if (useField('overtimeHours') && r.overtimeHours > 0) parts.push('加' + r.overtimeHours + 'h');
+      if (useField('leaveType') && r.leaveType) parts.push(r.leaveType);
+      if (useField('leaveHours') && r.leaveHours != null) parts.push(r.leaveHours + 'h');
+      return parts.join(' / ');
     };
 
-    const headerRow1 = ['日期', '排班', '打卡时间'];
-    const headerRow2 = ['', '', ''];
+    const headerRow1 = ['日期', '排班'];
+    const headerRow2 = ['', ''];
     for (const dc of deptCols) {
       for (let i = 0; i < dc.employees.length; i++) {
         headerRow1.push(i === 0 ? dc.department : '');
@@ -371,11 +407,10 @@ const Excel = {
     const rows = [headerRow1, headerRow2];
     const merges = [
       { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
-      { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
-      { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } }
+      { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } }
     ];
 
-    let deptStart = 3;
+    let deptStart = 2;
     for (const dc of deptCols) {
       if (dc.employees.length > 1) {
         merges.push({ s: { r: 0, c: deptStart }, e: { r: 0, c: deptStart + dc.employees.length - 1 } });
@@ -388,71 +423,33 @@ const Excel = {
     for (let d = 1; d <= lastDay; d++) {
       const dateStr = `${targetMonth}-${String(d).padStart(2, '0')}`;
       const dayNum = String(d).padStart(2, '0');
-      const dateSerial = dateToSerial(y, m, d);
+      const dateSerial = m + '月' + d + '日';
 
       const sched = scheduleForMonth.find(s => {
-        const match = s.workDays && s.workDays[dayNum] === true;
-        return match;
+        return s.workDays && s.workDays[dayNum] === true;
       });
       const isRest = (!sched) && scheduleForMonth.length > 0;
       const scheduleLabel = isRest ? '休息日' : '工作日';
 
-      const amRow = [dateSerial, scheduleLabel, '上午'];
-      const pmRow = ['', '', '下午'];
+      const dayRow = [dateSerial, scheduleLabel];
 
       for (const dc of deptCols) {
         for (const eno of dc.employees) {
           const dayResults = results.filter(r => r.employeeNo === eno && r.date === dateStr);
           const r = dayResults[0];
-
-          if (!r) {
-            amRow.push(''); pmRow.push('');
-            continue;
-          }
-
-          const signIn = r.signIn || '';
-          const signOut = r.signOut || '';
-
-          const annotations = [];
-          if (r.leaveType) annotations.push(r.leaveType);
-          if (r.overtimeHours > 0) annotations.push('加班 ' + r.overtimeHours + 'h');
-          if (r.travelHours > 0) annotations.push('出差');
-
-          const hasMissPunch = r.sourceMissIds && r.sourceMissIds.length > 0;
-          if (hasMissPunch && signIn && !signOut) annotations.push('下午补卡');
-          if (hasMissPunch && !signIn && signOut) annotations.push('上午补卡');
-
-          if (annotations.length > 0) {
-            amRow.push(annotations.join(' / '));
-            pmRow.push(signOut ? signOut : '');
-          } else if (r.status === 'rest') {
-            amRow.push(''); pmRow.push('');
-          } else if (r.status === 'leave' || r.status === 'travel') {
-            amRow.push(r.status === 'leave' ? '请假' : '出差');
-            pmRow.push('');
-          } else if (r.absent) {
-            amRow.push('缺勤'); pmRow.push('');
-          } else {
-            amRow.push(signIn || '');
-            pmRow.push(signOut || '');
-          }
+          dayRow.push(buildCell(r));
         }
       }
 
-      rows.push(amRow);
-      rows.push(pmRow);
-
-      merges.push({ s: { r: rowIdx, c: 0 }, e: { r: rowIdx + 1, c: 0 } });
-      merges.push({ s: { r: rowIdx, c: 1 }, e: { r: rowIdx + 1, c: 1 } });
-
-      rowIdx += 2;
+      rows.push(dayRow);
+      rowIdx += 1;
     }
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
     ws['!merges'] = merges;
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, y + '年' + m + '月考勤');
-    XLSX.writeFile(wb, '考勤月报_' + targetMonth + '.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, y + '年' + m + '月考勤明细');
+    XLSX.writeFile(wb, '考勤明细_' + targetMonth + '.xlsx');
   }
 };
