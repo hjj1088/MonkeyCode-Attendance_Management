@@ -27,12 +27,19 @@ CENTER_ALIGN = Alignment(horizontal='center', vertical='center')
 
 
 def _get_cell_style(val):
-    """根据单元格值判断样式"""
     font = None
     fill = None
     
     if not val:
         return font, fill
+    
+    sv = str(val)
+    if re.search(r'请假|出差|加班|补卡', sv):
+        font = BLUE_FONT
+    elif re.search(r'迟|早', sv):
+        font = RED_FONT
+    
+    return font, fill
     
     sv = str(val)
     if re.search(r'请假|出差|加班|补卡', sv):
