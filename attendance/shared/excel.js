@@ -316,226 +316,17 @@ const Excel = {
     return str;
   },
 
-   exportToExcel(records, template, filename) {
-    const headers = template.fields.map(f => f.label);
-    const maxCols = headers.length;
-
-    const ws = {};
-    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: records.length, c: maxCols - 1 } });
-
-    for (let c = 0; c < headers.length; c++) {
-      ws[XLSX.utils.encode_cell({ r: 0, c })] = { t: 's', v: headers[c] };
+  async _apiExport(endpoint, data, filename) {
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error('导出失败: ' + (errText || resp.statusText));
     }
-
-    for (let i = 0; i < records.length; i++) {
-      const rec = records[i];
-      const r = i + 1;
-      for (let ci = 0; ci < template.fields.length; ci++) {
-        const f = template.fields[ci];
-        let rawVal = f.field === '_index' ? i + 1 : (rec[f.field] !== undefined ? rec[f.field] : '');
-        if (rawVal === '' || rawVal === undefined || rawVal === null) continue;
-        const val = String(rawVal);
-        const ref = XLSX.utils.encode_cell({ r, c: ci });
-        const cell = { t: 's', v: val };
-        const s = {};
-
-        if (/请假|出差|加班|补卡/.test(val)) {
-          s.font = { color: { rgb: 'FF0066CC' } };
-        } else if (/迟|早/.test(val)) {
-          s.font = { color: { rgb: 'FFFF0000' } };
-        } else if (/^\d{1,2}:\d{2}/.test(val)) {
-          s.font = { color: { rgb: 'FFFF0000' } };
-        }
-
-        if (Object.keys(s).length > 0) cell.s = s;
-        ws[ref] = cell;
-      }
-    }
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '考勤记录');
-    Excel._writeWithStyles(wb, filename || 'attendance_export.xlsx');
-  },
-
-  async exportCalendarReport(targetMonth, fields) {
-    const [yearStr, monthStr] = targetMonth.split('-');
-    const y = parseInt(yearStr);
-    const m = parseInt(monthStr);
-    const lastDay = new Date(y, m, 0).getDate();
-
-    const results = await Store.getByIndex('attendance_results', 'month', targetMonth);
-    if (results.length === 0) throw new Error('没有考勤结果，请先执行计算');
-
-    const allSchedules = await Store.getByIndex('schedules', 'year', y);
-    const scheduleForMonth = allSchedules.filter(s => s.month === m);
-
-    const deptEmployees = {};
-    const empMap = {};
-    for (const r of results) {
-      const dept = r.department || '未分配';
-      if (!deptEmployees[dept]) deptEmployees[dept] = new Set();
-      deptEmployees[dept].add(r.employeeNo);
-      if (!empMap[r.employeeNo]) empMap[r.employeeNo] = { name: r.name, department: dept };
-    }
-
-    const deptCols = [];
-    for (const [dept, enoSet] of Object.entries(deptEmployees)) {
-      deptCols.push({ department: dept, employees: [...enoSet].sort() });
-    }
-
-    const fieldSet = new Set(fields ? fields.map(f => f.field) : []);
-    const useField = (name) => !fields || fieldSet.has(name);
-
-    const buildAMCell = (r) => {
-      if (!r) return '';
-      if (r.status === 'rest') return '';
-      if (r.status === 'leave') {
-        const parts = ['请假'];
-        if (useField('leaveType') && r.leaveType) parts.push(r.leaveType);
-        if (useField('leaveHours') && r.leaveHours != null) parts.push(r.leaveHours + 'h');
-        return parts.join('/');
-      }
-      if (r.status === 'travel') {
-        const parts = ['出差'];
-        if (useField('travelHours') && r.travelHours) parts.push(r.travelHours + 'h');
-        return parts.join('/');
-      }
-      if (r.status === 'absent' || r.absent) return '缺勤';
-      if (r.status === 'overtime' || r.status === 'suspect_ot') {
-        const parts = ['加班'];
-        if (useField('overtimeHours') && r.overtimeHours) parts.push(r.overtimeHours + 'h');
-        return parts.join('/');
-      }
-      if (useField('signIn') && r.signIn) {
-        let val = r.signIn;
-        if (useField('lateMinutes') && r.lateMinutes > 0) val += ' 迟' + r.lateMinutes + 'min';
-        return val;
-      }
-      return '';
-    };
-
-    const buildPMCell = (r) => {
-      if (!r) return '';
-      if (r.status === 'rest' || r.status === 'leave' || r.status === 'travel' || r.status === 'absent' || r.absent) return '';
-      if (useField('signOut') && r.signOut) {
-        let val = r.signOut;
-        if (useField('earlyMinutes') && r.earlyMinutes > 0) val += ' 早' + r.earlyMinutes + 'min';
-        return val;
-      }
-      return '';
-    };
-
-    const headerRow1 = ['日期', '排班', '打卡时间'];
-    const headerRow2 = ['', '', ''];
-    for (const dc of deptCols) {
-      for (let i = 0; i < dc.employees.length; i++) {
-        headerRow1.push(i === 0 ? dc.department : '');
-        headerRow2.push(empMap[dc.employees[i]].name);
-      }
-    }
-
-    const rows = [headerRow1, headerRow2];
-    const restRows = new Set();
-    const merges = [
-      { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
-      { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
-      { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } }
-    ];
-
-    let deptStart = 3;
-    for (const dc of deptCols) {
-      if (dc.employees.length > 1) {
-        merges.push({ s: { r: 0, c: deptStart }, e: { r: 0, c: deptStart + dc.employees.length - 1 } });
-      }
-      deptStart += dc.employees.length;
-    }
-
-    let rowIdx = 2;
-
-    for (let d = 1; d <= lastDay; d++) {
-      const dateStr = `${targetMonth}-${String(d).padStart(2, '0')}`;
-      const dayNum = String(d).padStart(2, '0');
-      const dateSerial = m + '月' + d + '日';
-
-      const sched = scheduleForMonth.find(s => {
-        return s.workDays && s.workDays[dayNum] === true;
-      });
-      const isRest = (!sched) && scheduleForMonth.length > 0;
-      const scheduleLabel = isRest ? '休息日' : '工作日';
-
-      if (isRest) {
-        restRows.add(rowIdx);
-        restRows.add(rowIdx + 1);
-      }
-
-      const amRow = [dateSerial, scheduleLabel, '上午'];
-      const pmRow = ['', '', '下午'];
-
-      for (const dc of deptCols) {
-        for (const eno of dc.employees) {
-          const dayResults = results.filter(r => r.employeeNo === eno && r.date === dateStr);
-          const r = dayResults[0];
-          amRow.push(buildAMCell(r));
-          pmRow.push(buildPMCell(r));
-        }
-      }
-
-      rows.push(amRow);
-      rows.push(pmRow);
-
-      merges.push({ s: { r: rowIdx, c: 0 }, e: { r: rowIdx + 1, c: 0 } });
-      merges.push({ s: { r: rowIdx, c: 1 }, e: { r: rowIdx + 1, c: 1 } });
-
-      rowIdx += 2;
-    }
-
-    const maxCols = headerRow1.length;
-    const ws = {};
-    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length - 1, c: maxCols - 1 } });
-    ws['!merges'] = merges;
-
-    for (let r = 0; r < rows.length; r++) {
-      const isRestRow = restRows.has(r);
-      for (let c = 0; c < rows[r].length; c++) {
-        const rawVal = rows[r][c];
-        const ref = XLSX.utils.encode_cell({ r, c });
-
-        if (rawVal === '' || rawVal === undefined || rawVal === null) {
-          if (isRestRow) {
-            ws[ref] = { t: 's', v: '', s: { fill: { fgColor: { rgb: 'FFD9D9D9' }, patternType: 'solid' } } };
-          }
-          continue;
-        }
-
-        const val = String(rawVal);
-        const cell = { t: 's', v: val };
-        const s = {};
-
-        if (isRestRow) {
-          s.fill = { fgColor: { rgb: 'FFD9D9D9' }, patternType: 'solid' };
-        }
-
-        if (/请假|出差|加班|补卡/.test(val)) {
-          s.font = { color: { rgb: 'FF0066CC' } };
-        } else if (/迟|早/.test(val)) {
-          s.font = { color: { rgb: 'FFFF0000' } };
-        } else if (/^\d{1,2}:\d{2}/.test(val)) {
-          s.font = { color: { rgb: 'FFFF0000' } };
-        }
-
-        if (Object.keys(s).length > 0) cell.s = s;
-        ws[ref] = cell;
-      }
-    }
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, y + '年' + m + '月考勤明细');
-    Excel._writeWithStyles(wb, '考勤明细_' + targetMonth + '.xlsx');
-  },
-
-  _writeWithStyles(wb, filename) {
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true });
-    const blob = new Blob([wbout], { type: 'application/octet-stream' });
+    const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -544,5 +335,32 @@ const Excel = {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  },
+
+   exportToExcel(records, template, filename) {
+    return Excel._apiExport('/api/export/flat', {
+      records: records,
+      template: template,
+      filename: filename || 'attendance_export.xlsx'
+    }, filename || 'attendance_export.xlsx');
+  },
+
+  async exportCalendarReport(targetMonth, fields) {
+    const [yearStr, monthStr] = targetMonth.split('-');
+    const y = parseInt(yearStr);
+    const m = parseInt(monthStr);
+
+    const results = await Store.getByIndex('attendance_results', 'month', targetMonth);
+    if (results.length === 0) throw new Error('没有考勤结果，请先执行计算');
+
+    const allSchedules = await Store.getByIndex('schedules', 'year', y);
+    const scheduleForMonth = allSchedules.filter(s => s.month === m);
+
+    return Excel._apiExport('/api/export/calendar', {
+      targetMonth: targetMonth,
+      fields: fields || [],
+      results: results,
+      schedules: scheduleForMonth
+    }, '考勤明细_' + targetMonth + '.xlsx');
   }
 };
