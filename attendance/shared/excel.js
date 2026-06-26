@@ -318,58 +318,43 @@ const Excel = {
 
    exportToExcel(records, template, filename) {
     const headers = template.fields.map(f => f.label);
-    const data = records.map((rec, idx) => {
-      return template.fields.map(f => {
-        if (f.field === '_index') return idx + 1;
-        return rec[f.field] !== undefined ? rec[f.field] : '';
-      });
-    });
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-    Excel._applyCellStyles(ws, { headerRows: 1 });
+    const maxCols = headers.length;
+
+    const ws = {};
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: records.length, c: maxCols - 1 } });
+
+    for (let c = 0; c < headers.length; c++) {
+      ws[XLSX.utils.encode_cell({ r: 0, c })] = { t: 's', v: headers[c] };
+    }
+
+    for (let i = 0; i < records.length; i++) {
+      const rec = records[i];
+      const r = i + 1;
+      for (let ci = 0; ci < template.fields.length; ci++) {
+        const f = template.fields[ci];
+        let rawVal = f.field === '_index' ? i + 1 : (rec[f.field] !== undefined ? rec[f.field] : '');
+        if (rawVal === '' || rawVal === undefined || rawVal === null) continue;
+        const val = String(rawVal);
+        const ref = XLSX.utils.encode_cell({ r, c: ci });
+        const cell = { t: 's', v: val };
+        const s = {};
+
+        if (/请假|出差|加班|补卡/.test(val)) {
+          s.font = { color: { rgb: '0066CC' } };
+        } else if (/迟|早/.test(val)) {
+          s.font = { color: { rgb: 'FF0000' } };
+        } else if (/^\d{1,2}:\d{2}/.test(val)) {
+          s.font = { color: { rgb: 'FF0000' } };
+        }
+
+        if (Object.keys(s).length > 0) cell.s = s;
+        ws[ref] = cell;
+      }
+    }
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '考勤记录');
     XLSX.writeFile(wb, filename || 'attendance_export.xlsx');
-  },
-
-  _applyCellStyles(ws, opts) {
-    const { headerRows, isCalendar } = opts;
-    const range = XLSX.utils.decode_range(ws['!ref']);
-
-    for (let r = headerRows; r <= range.e.r; r++) {
-      let isRestRow = false;
-      if (isCalendar) {
-        const bRef = XLSX.utils.encode_cell({ r, c: 1 });
-        const bPrevRef = r > 0 ? XLSX.utils.encode_cell({ r: r - 1, c: 1 }) : null;
-        const bVal = (ws[bRef] && ws[bRef].v) || (bPrevRef && ws[bPrevRef] && ws[bPrevRef].v) || '';
-        isRestRow = bVal === '休息日';
-      }
-
-      for (let c = 0; c <= range.e.c; c++) {
-        const ref = XLSX.utils.encode_cell({ r, c });
-        let cell = ws[ref];
-
-        if (isRestRow) {
-          if (!cell) { cell = ws[ref] = { t: 's', v: '' }; }
-          cell.s = cell.s || {};
-          cell.s.fill = { fgColor: { rgb: 'D9D9D9' }, patternType: 'solid' };
-        }
-
-        if (!cell || cell.v === undefined || cell.v === '') continue;
-        const val = String(cell.v);
-
-        if (!isRestRow) cell.s = cell.s || {};
-
-        if (/迟|早/.test(val)) {
-          cell.s.font = { color: { rgb: 'FF0000' } };
-        } else if (/^\d{1,2}:\d{2}/.test(val)) {
-          cell.s.font = { color: { rgb: 'FF0000' } };
-        }
-
-        if (/请假|出差|加班|补卡/.test(val)) {
-          cell.s.font = { color: { rgb: '0066CC' } };
-        }
-      }
-    }
   },
 
   async exportCalendarReport(targetMonth, fields) {
@@ -450,6 +435,7 @@ const Excel = {
     }
 
     const rows = [headerRow1, headerRow2];
+    const restRows = new Set();
     const merges = [
       { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
       { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
@@ -477,6 +463,11 @@ const Excel = {
       const isRest = (!sched) && scheduleForMonth.length > 0;
       const scheduleLabel = isRest ? '休息日' : '工作日';
 
+      if (isRest) {
+        restRows.add(rowIdx);
+        restRows.add(rowIdx + 1);
+      }
+
       const amRow = [dateSerial, scheduleLabel, '上午'];
       const pmRow = ['', '', '下午'];
 
@@ -498,9 +489,44 @@ const Excel = {
       rowIdx += 2;
     }
 
-    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const maxCols = headerRow1.length;
+    const ws = {};
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length - 1, c: maxCols - 1 } });
     ws['!merges'] = merges;
-    Excel._applyCellStyles(ws, { headerRows: 2, isCalendar: true });
+
+    for (let r = 0; r < rows.length; r++) {
+      const isRestRow = restRows.has(r);
+      for (let c = 0; c < rows[r].length; c++) {
+        const rawVal = rows[r][c];
+        const ref = XLSX.utils.encode_cell({ r, c });
+
+        if (rawVal === '' || rawVal === undefined || rawVal === null) {
+          if (isRestRow) {
+            ws[ref] = { t: 's', v: '', s: { fill: { fgColor: { rgb: 'D9D9D9' }, patternType: 'solid' } } };
+          }
+          continue;
+        }
+
+        const val = String(rawVal);
+        const cell = { t: 's', v: val };
+        const s = {};
+
+        if (isRestRow) {
+          s.fill = { fgColor: { rgb: 'D9D9D9' }, patternType: 'solid' };
+        }
+
+        if (/请假|出差|加班|补卡/.test(val)) {
+          s.font = { color: { rgb: '0066CC' } };
+        } else if (/迟|早/.test(val)) {
+          s.font = { color: { rgb: 'FF0000' } };
+        } else if (/^\d{1,2}:\d{2}/.test(val)) {
+          s.font = { color: { rgb: 'FF0000' } };
+        }
+
+        if (Object.keys(s).length > 0) cell.s = s;
+        ws[ref] = cell;
+      }
+    }
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, y + '年' + m + '月考勤明细');
