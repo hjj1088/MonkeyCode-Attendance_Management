@@ -340,11 +340,11 @@ const Excel = {
         const s = {};
 
         if (/请假|出差|加班|补卡/.test(val)) {
-          s.font = { color: { rgb: '0066CC' } };
+          s.font = { color: { rgb: 'FF0066CC' } };
         } else if (/迟|早/.test(val)) {
-          s.font = { color: { rgb: 'FF0000' } };
+          s.font = { color: { rgb: 'FFFF0000' } };
         } else if (/^\d{1,2}:\d{2}/.test(val)) {
-          s.font = { color: { rgb: 'FF0000' } };
+          s.font = { color: { rgb: 'FFFF0000' } };
         }
 
         if (Object.keys(s).length > 0) cell.s = s;
@@ -354,7 +354,7 @@ const Excel = {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '考勤记录');
-    XLSX.writeFile(wb, filename || 'attendance_export.xlsx');
+    Excel._writeWithStyles(wb, filename || 'attendance_export.xlsx');
   },
 
   async exportCalendarReport(targetMonth, fields) {
@@ -502,7 +502,7 @@ const Excel = {
 
         if (rawVal === '' || rawVal === undefined || rawVal === null) {
           if (isRestRow) {
-            ws[ref] = { t: 's', v: '', s: { fill: { fgColor: { rgb: 'D9D9D9' }, patternType: 'solid' } } };
+            ws[ref] = { t: 's', v: '', s: { fill: { fgColor: { rgb: 'FFD9D9D9' }, patternType: 'solid' } } };
           }
           continue;
         }
@@ -512,15 +512,15 @@ const Excel = {
         const s = {};
 
         if (isRestRow) {
-          s.fill = { fgColor: { rgb: 'D9D9D9' }, patternType: 'solid' };
+          s.fill = { fgColor: { rgb: 'FFD9D9D9' }, patternType: 'solid' };
         }
 
         if (/请假|出差|加班|补卡/.test(val)) {
-          s.font = { color: { rgb: '0066CC' } };
+          s.font = { color: { rgb: 'FF0066CC' } };
         } else if (/迟|早/.test(val)) {
-          s.font = { color: { rgb: 'FF0000' } };
+          s.font = { color: { rgb: 'FFFF0000' } };
         } else if (/^\d{1,2}:\d{2}/.test(val)) {
-          s.font = { color: { rgb: 'FF0000' } };
+          s.font = { color: { rgb: 'FFFF0000' } };
         }
 
         if (Object.keys(s).length > 0) cell.s = s;
@@ -530,6 +530,19 @@ const Excel = {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, y + '年' + m + '月考勤明细');
-    XLSX.writeFile(wb, '考勤明细_' + targetMonth + '.xlsx');
+    Excel._writeWithStyles(wb, '考勤明细_' + targetMonth + '.xlsx');
+  },
+
+  _writeWithStyles(wb, filename) {
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true });
+    const blob = new Blob([wbout], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 };
