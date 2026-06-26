@@ -359,44 +359,39 @@ const Excel = {
     const fieldSet = new Set(fields ? fields.map(f => f.field) : []);
     const useField = (name) => !fields || fieldSet.has(name);
 
-    const buildCell = (r) => {
+    const buildAMCell = (r) => {
       if (!r) return '';
-      const parts = [];
       if (r.status === 'rest') return '';
       if (r.status === 'leave') {
-        parts.push('请假');
+        const parts = ['请假'];
         if (useField('leaveType') && r.leaveType) parts.push(r.leaveType);
         if (useField('leaveHours') && r.leaveHours != null) parts.push(r.leaveHours + 'h');
         return parts.join('/');
       }
       if (r.status === 'travel') {
-        parts.push('出差');
+        const parts = ['出差'];
         if (useField('travelHours') && r.travelHours) parts.push(r.travelHours + 'h');
         return parts.join('/');
       }
       if (r.status === 'absent' || r.absent) return '缺勤';
-      if (r.status === 'overtime') {
-        parts.push('加班');
+      if (r.status === 'overtime' || r.status === 'suspect_ot') {
+        const parts = ['加班'];
         if (useField('overtimeHours') && r.overtimeHours) parts.push(r.overtimeHours + 'h');
         return parts.join('/');
       }
-      if (r.status === 'suspect_ot') {
-        parts.push('加班');
-        if (useField('overtimeHours') && r.overtimeHours) parts.push(r.overtimeHours + 'h');
-        return parts.join('/');
-      }
-      if (useField('signIn') && r.signIn) parts.push(r.signIn);
-      if (useField('signOut') && r.signOut) parts.push(r.signOut);
-      if (useField('lateMinutes') && r.lateMinutes > 0) parts.push('迟' + r.lateMinutes + 'min');
-      if (useField('earlyMinutes') && r.earlyMinutes > 0) parts.push('早' + r.earlyMinutes + 'min');
-      if (useField('overtimeHours') && r.overtimeHours > 0) parts.push('加' + r.overtimeHours + 'h');
-      if (useField('leaveType') && r.leaveType) parts.push(r.leaveType);
-      if (useField('leaveHours') && r.leaveHours != null) parts.push(r.leaveHours + 'h');
-      return parts.join(' / ');
+      if (useField('signIn') && r.signIn) return r.signIn;
+      return '';
     };
 
-    const headerRow1 = ['日期', '排班'];
-    const headerRow2 = ['', ''];
+    const buildPMCell = (r) => {
+      if (!r) return '';
+      if (r.status === 'rest' || r.status === 'leave' || r.status === 'travel' || r.status === 'absent' || r.absent) return '';
+      if (useField('signOut') && r.signOut) return r.signOut;
+      return '';
+    };
+
+    const headerRow1 = ['日期', '排班', '打卡时间'];
+    const headerRow2 = ['', '', ''];
     for (const dc of deptCols) {
       for (let i = 0; i < dc.employees.length; i++) {
         headerRow1.push(i === 0 ? dc.department : '');
@@ -407,10 +402,11 @@ const Excel = {
     const rows = [headerRow1, headerRow2];
     const merges = [
       { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
-      { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } }
+      { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
+      { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } }
     ];
 
-    let deptStart = 2;
+    let deptStart = 3;
     for (const dc of deptCols) {
       if (dc.employees.length > 1) {
         merges.push({ s: { r: 0, c: deptStart }, e: { r: 0, c: deptStart + dc.employees.length - 1 } });
@@ -431,18 +427,25 @@ const Excel = {
       const isRest = (!sched) && scheduleForMonth.length > 0;
       const scheduleLabel = isRest ? '休息日' : '工作日';
 
-      const dayRow = [dateSerial, scheduleLabel];
+      const amRow = [dateSerial, scheduleLabel, '上午'];
+      const pmRow = ['', '', '下午'];
 
       for (const dc of deptCols) {
         for (const eno of dc.employees) {
           const dayResults = results.filter(r => r.employeeNo === eno && r.date === dateStr);
           const r = dayResults[0];
-          dayRow.push(buildCell(r));
+          amRow.push(buildAMCell(r));
+          pmRow.push(buildPMCell(r));
         }
       }
 
-      rows.push(dayRow);
-      rowIdx += 1;
+      rows.push(amRow);
+      rows.push(pmRow);
+
+      merges.push({ s: { r: rowIdx, c: 0 }, e: { r: rowIdx + 1, c: 0 } });
+      merges.push({ s: { r: rowIdx, c: 1 }, e: { r: rowIdx + 1, c: 1 } });
+
+      rowIdx += 2;
     }
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
