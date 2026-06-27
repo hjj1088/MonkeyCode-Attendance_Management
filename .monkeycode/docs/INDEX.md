@@ -28,6 +28,7 @@
 | [模块/excel-模块.md](./模块/excel-模块.md) | Excel 处理：文件解析、颜色识别、类型检测、导出 |
 | [模块/matcher-模块.md](./模块/matcher-模块.md) | 数据匹配：员工映射、OA 到打卡关联、跨表匹配 |
 | [模块/auth-模块.md](./模块/auth-模块.md) | 认证系统：localStorage 登录、页面守卫 |
+| [模块/export-server-模块.md](./模块/export-server-模块.md) | 导出服务：HTTP 导出 API、XLSX 生成、CORS 支持 |
 
 ## 快速导航
 

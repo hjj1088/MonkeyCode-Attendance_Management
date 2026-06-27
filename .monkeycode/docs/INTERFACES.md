@@ -233,3 +233,11 @@ RulesEngine.calculateMonth(targetMonth)  // 计算指定月考勤
 RulesEngine.getMonthResults(targetMonth) // 获取某月考勤结果
 RulesEngine.getResultDetail(eno, date)   // 获取某天详情 (含关联源记录)
 ```
+
+## HTTP 导出 API
+
+| 端点 | 方法 | 请求体 | 响应 |
+|------|------|--------|------|
+| `/api/export/flat` | POST | `{records: array, template: {fields: [{label, field}]}, filename: string}` | 二进制 XLSX, `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| `/api/export/calendar` | POST | `{targetMonth: "YYYY-MM", fields: array, results: array, schedules: array, holidays: array}` | 二进制 XLSX |
+| `/*` | OPTIONS | — | 204, `Access-Control-Allow-Origin: *` (CORS 预检)

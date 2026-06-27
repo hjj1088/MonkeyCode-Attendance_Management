@@ -47,6 +47,10 @@
    - 判断 `status` (normal → rest → leave → travel → normal(漏打卡) → absent → abnormal)
    - 计算偏差和加班
    - 产出结果记录 (含 sourcePunchIds 等关联 ID)
+
+  **v1.0.25 修复**：两处关键逻辑增加 `isWorkDay` 条件守卫：
+  - `missRecord` 仅在上班日 (`isWorkDay`) 时将状态重置为 `normal`，防止休息日的 `suspect_ot` 被漏打卡记录错误覆盖
+  - 迟到判定 (`totalLate > 0`) 仅在上班日 (`isWorkDay`) 时触发 `abnormal`，防止休息日打卡被标记为迟到
 6. 全月汇总后执行容错豁免
 7. 更新加班结余 (`_updateCarryOver`)
 8. 清空旧结果 → 写入新结果

@@ -2,14 +2,17 @@
 
 ## 环境搭建
 
-系统为纯前端项目，无需 Node.js 构建环境。
+系统为前后端分离项目。前端为纯静态页面，后端为 Python 导出服务。
 
 ```bash
-# 启动本地开发服务器
-python3 -m http.server 8000 --directory /workspace/attendance
+# 安装 Python 依赖
+pip install openpyxl
+
+# 启动服务（同时提供静态文件与导出 API）
+python3 /workspace/attendance/export_server.py
 ```
 
-访问 `http://localhost:8000` 即可。
+访问 `http://localhost:8000` 即可。服务默认监听 8000 端口，可通过 `PORT` 环境变量修改。
 
 ## 项目结构约定
 
@@ -45,6 +48,7 @@ python3 -m http.server 8000 --directory /workspace/attendance
 
 - `rules.js` 修改 → 提升 `attendance.html` 版本号
 - `excel.js` 修改 → 提升 `import.html` + `export.html` 版本号
+- `export_server.py` 修改 → 提升 `export.html` 版本号（API 契约可能变更）
 - `db.js` 修改 → 提升所有引用页面的版本号
 - `matcher.js` 修改 → 提升 `import.html` 版本号
 
@@ -72,9 +76,10 @@ DB.version(2).stores({
 
 ## 已知限制
 
-1. **仅单文件部署**：所有 HTML 在同一目录，通过 `python3 -m http.server` 服务
+1. **Python 依赖**：导出功能需要 `openpyxl` 库，未安装时导出失败（启动脚本会自动安装）
 2. **前端存储**：数据存在于浏览器 IndexedDB，换浏览器/清除缓存后丢失
-3. **无后端**：不支持多用户协作、数据同步
+3. **单用户存储**：IndexedDB 数据无法跨设备同步，不支持多用户协作
 4. **Dexie 4.0.8 Bug**：`bulkPut` 会修改传入数组，必须 `JSON.parse(JSON.stringify())` 深拷贝后再写入
 5. **CDN 依赖**：Tailwind CSS 通过 CDN 加载，无网络时样式失效
 6. **Excel 时间格式**：数字格式时间（<1 的小数）自动转为 HH:MM，字符串时间保持原样
+7. **SheetJS 社区版限制**：不支持单元格样式写入，导出样式由 Python openpyxl 实现

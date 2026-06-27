@@ -2,7 +2,7 @@
 
 ## 概述
 
-考勤管理系统是一个**纯前端**考勤数据处理工具，运行在浏览器端，无需后端服务器。系统处理企业考勤数据的完整生命周期：导入 Excel → 规则计算 → 查询浏览 → 导出报表。
+考勤管理系统是一个**前后端分离**的考勤数据处理工具。前端运行在浏览器端负责数据导入、规则计算、查询浏览；后端由 Python 导出服务 (`export_server.py`) 负责生成带样式的 XLSX 报表。系统处理企业考勤数据的完整生命周期：导入 Excel → 规则计算 → 查询浏览 → 导出报表。
 
 ## 技术栈
 
@@ -11,11 +11,13 @@
 | UI 框架 | Vue.js | 3.x (CDN) | 响应式界面，组件化开发 |
 | CSS 框架 | Tailwind CSS | 3.x (CDN) | 原子化样式 |
 | 数据存储 | Dexie.js | 4.0.8 (本地文件) | IndexedDB 封装，SQL-like 查询 |
-| Excel 读写 | SheetJS (xlsx) | 最新 (本地文件) | Excel 解析、单元格颜色读取、导出 |
+| Excel 导入 | SheetJS (xlsx) | 0.20.3 (本地文件) | Excel 解析、单元格颜色读取 |
+| Excel 导出 | Python openpyxl | 3.1.5 (pip) | XLSX 生成，支持单元格样式（字体颜色、填充色） |
+| 后端服务 | Python http.server | 标准库 | HTTP API + 静态文件服务 |
 | 认证 | localStorage | 浏览器原生 | 简单的用户名/密码认证 |
-| 部署 | Python http.server | 标准库 | 本地静态文件服务 |
+| 部署 | Python 单进程 | 标准库 | `export_server.py` 同时提供静态文件与 API 端点 |
 
-所有依赖通过 CDN 或本地 `lib/` 目录加载，无需 npm/pnpm 构建步骤。
+前端依赖通过 CDN 或本地 `lib/` 目录加载，无需 npm/pnpm 构建步骤。Python 依赖 `openpyxl` 需通过 `pip install openpyxl` 安装。
 
 ## 项目结构
 
@@ -26,6 +28,7 @@ attendance/
 ├── attendance.html       # 考勤计算页（列表/日历视图 + 详情弹窗）
 ├── export.html           # 导出中心（模板编辑 + Flat/月报导出）
 ├── settings.html         # 考勤规则设置（上下班时间、容错、假期管理）
+├── export_server.py      # Python 导出服务（HTTP API + 静态文件，openpyxl 生成 XLSX）
 ├── lib/                  # 第三方库（本地文件）
 │   ├── vue.global.prod.js
 │   ├── dexie.min.js
@@ -34,7 +37,7 @@ attendance/
     ├── auth.js           # 认证模块
     ├── db.js             # 数据库模块
     ├── rules.js          # 规则引擎模块
-    ├── excel.js          # Excel 处理模块
+    ├── excel.js          # Excel 处理模块 (SheetJS 导入 + API 导出)
     └── matcher.js        # 数据匹配模块
 ```
 
@@ -56,7 +59,10 @@ attendance.html    ← 计算核心
 
 export.html        ← 导出出口
     +-- db.js
-    +-- excel.js    ← 导出 Excel
+    +-- excel.js    ← 准备数据 → HTTP API
+
+export_server.py   ← Python 导出服务
+    +-- openpyxl   ← XLSX 生成（字体颜色、填充色、边框、合并单元格）
 
 settings.html      ← 配置管理
     +-- db.js
@@ -103,8 +109,8 @@ settings.html      ← 配置管理
 
 3. **导出阶段** (`export.html`)：
    - 用户编辑导出模板字段
-   - Flat 模式：`Excel.exportToExcel()` 按模板列导出
-   - 月报模式：`Excel.exportCalendarReport()` 日历格式导出
+   - Flat 模式：前端准备 records + template → POST `/api/export/flat` → Python openpyxl 生成 XLSX
+   - 月报模式：前端读取 results + schedules + holidays → POST `/api/export/calendar` → Python 生成日历格式 XLSX（含假期名称、单元格样式）
 
 ## 页面导航
 
@@ -138,4 +144,4 @@ index.html (登录页)
 
 文件版本号通过 URL 查询参数 `?v=1.0.10` 控制浏览器缓存刷新。各文件版本号已按依赖关系同步（修改 `rules.js` 时连带提升 `attendance.html` 的版本号）。
 
-当前版本：**v1.0.10**
+当前版本：**v1.0.25**
