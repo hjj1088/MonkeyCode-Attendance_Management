@@ -303,6 +303,12 @@
                 }
               }
             }
+            const rulesVerEntry = await Store.getByKey('settings', 'rules_version');
+            if (!rulesVerEntry || rulesVerEntry.value !== RULES_VERSION) {
+              await Store.put('settings', { key: 'rules_version', value: RULES_VERSION });
+              await this.runCalculation();
+              return;
+            }
           }
           const [y, m] = this.currentMonth.split('-').map(Number);
           const schedCount = await DB.schedules.where('[employeeNo+year+month]').between([0, y, m], ['\uffff', y, m], true, true).count();

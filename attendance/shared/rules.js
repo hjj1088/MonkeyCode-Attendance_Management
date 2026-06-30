@@ -1,6 +1,8 @@
 // shared/rules.js
 // 考勤规则引擎 - 迟到/早退/旷工判定、容错、结余计算
 
+const RULES_VERSION = '1.0.26';
+
 const RulesEngine = {
   async getConfig() {
     const entry = await Store.getByKey('settings', 'attendance_config');
