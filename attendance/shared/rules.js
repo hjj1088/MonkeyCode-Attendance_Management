@@ -229,6 +229,10 @@ const RulesEngine = {
           absent = true;
         }
 
+        if (isWorkDay && hasRealPunch && (!firstSignIn || !lastSignOut) && !leaveRecord && !travelRecord && !missRecord) {
+          status = 'abnormal';
+        }
+
         if (totalLate > 0 && hasRealPunch && isWorkDay && status !== 'leave' && status !== 'travel') {
           lateRecords.push({ date: dateStr, minutes: totalLate });
           status = 'abnormal';

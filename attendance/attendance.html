@@ -188,11 +188,11 @@
     </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.19"></script>
-  <script src="./lib/dexie.min.js?v=1.0.19"></script>
-  <script src="./shared/auth.js?v=1.0.19"></script>
-  <script src="./shared/db.js?v=1.0.19"></script>
-  <script src="./shared/rules.js?v=1.0.19"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.26"></script>
+  <script src="./lib/dexie.min.js?v=1.0.26"></script>
+  <script src="./shared/auth.js?v=1.0.26"></script>
+  <script src="./shared/db.js?v=1.0.26"></script>
+  <script src="./shared/rules.js?v=1.0.26"></script>
   <script>
     Auth.requireAuth();
 
@@ -269,6 +269,7 @@
           if (r.status === 'suspect_ot') { parts.push('疑似加班'); }
           const hasMiss = r.sourceMissIds && r.sourceMissIds.length > 0;
           if (hasMiss) parts.push('补卡');
+          if (r.status === 'abnormal' && (!r.signIn || !r.signOut)) parts.push('缺卡');
           if (r.absent) parts.push('缺勤');
           return parts.join('/');
         },
