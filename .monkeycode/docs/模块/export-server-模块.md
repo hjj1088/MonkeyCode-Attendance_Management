@@ -75,7 +75,13 @@ CORS 预检：返回 `204 No Content`，允许 `POST, OPTIONS` 方法及 `Conten
 
 1. 从 `template.fields` 提取表头标签
 2. 写入加粗居中带边框的表头行
-3. 遍历 records 逐行写入数据，`_index` 特殊字段自动填充行号
+3. 遍历 records 逐行写入数据，`_index` 特殊字段自动填充行号，`status` 字段通过 `status_labels` 映射为中文标签：
+   ```
+   'normal' → '正常', 'rest' → '休息', 'abnormal' → '迟到',
+   'leave' → '请假', 'travel' → '出差', 'absent' → '缺勤',
+   'overtime' → '加班', 'suspect_ot' → '疑似加班',
+   'no_sign_in' → '上班未打卡', 'no_sign_out' → '下班未打卡'
+   ```
 4. 通过 `_get_cell_style()` 为异常状态单元格着色
 5. 列宽自适应，上限 40
 
@@ -86,11 +92,9 @@ CORS 预检：返回 `204 No Content`，允许 `POST, OPTIONS` 方法及 `Conten
 | 文本匹配 | 样式 | 说明 |
 |----------|------|------|
 | `请假\|出差\|加班\|补卡` | `BLUE_FONT` (#0066CC) | OA 审批类状态 |
-| `迟\|早` | `RED_FONT` (#FF0000) | 迟到/早退标记 |
+| `迟\|早\|上班未打卡\|下班未打卡` | `RED_FONT` (#FF0000) | 迟到/早退/未打卡标记 |
 | `^\d{1,2}:\d{2}` (时间格式) | `RED_FONT` | 打卡时间异常 |
 | 其他 | 无样式 | 正常文本 |
-
-注：`_get_cell_style()` 在中途有一个不可达的 `return` 语句（第 42 行），其下方代码（第 44-52 行）为实际生效逻辑。该结构不改变功能但存在冗余分支。
 
 ### build_am_cell(r) / build_pm_cell(r)
 
@@ -105,6 +109,7 @@ CORS 预检：返回 `204 No Content`，允许 `POST, OPTIONS` 方法及 `Conten
 | `status='leave'` | `请假/类型/nh`（根据 fields 控制字段显示） |
 | `status='travel'` | `出差/nh` |
 | `status='absent'` 或 `absent=true` | `缺勤` |
+| `status='no_sign_in'` | `上班未打卡` (通过 `_get_cell_style` 获得 `RED_FONT`) |
 | `status='overtime'/'suspect_ot'` | `加班/nh` |
 | 有签到时间 | `signIn 值 [+ 迟nmin]` |
 | 其他 | 空 |
@@ -116,6 +121,7 @@ CORS 预检：返回 `204 No Content`，允许 `POST, OPTIONS` 方法及 `Conten
 | 记录为空 | 空 |
 | `status` 为 rest/leave/travel/absent | 空 |
 | `absent=true` | 空 |
+| `status='no_sign_out'` | `下班未打卡` (通过 `_get_cell_style` 获得 `RED_FONT`) |
 | 有签退时间 | `signOut 值 [+ 早nmin]` |
 | 其他 | 空 |
 

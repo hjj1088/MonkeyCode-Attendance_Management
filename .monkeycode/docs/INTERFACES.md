@@ -116,7 +116,7 @@
 | department | 部门 |
 | date | 日期 |
 | month | 月份 |
-| status | 考勤状态 (normal/rest/abnormal/leave/travel/absent) |
+| status | 考勤状态 (normal/rest/abnormal/leave/travel/absent/no_sign_in/no_sign_out) |
 | signIn | 签到时间 |
 | signOut | 签退时间 |
 | lateMinutes | 迟到分钟 |

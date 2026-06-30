@@ -44,6 +44,10 @@ python3 /workspace/attendance/export_server.py
 
 ## 版本号管理
 
+当前版本：**v1.0.28**。
+
+### `?v=` Query String
+
 修改文件后，需提升该文件所引用 script 标签的 `?v=` 版本号：
 
 - `rules.js` 修改 → 提升 `attendance.html` 版本号
@@ -51,6 +55,15 @@ python3 /workspace/attendance/export_server.py
 - `export_server.py` 修改 → 提升 `export.html` 版本号（API 契约可能变更）
 - `db.js` 修改 → 提升所有引用页面的版本号
 - `matcher.js` 修改 → 提升 `import.html` 版本号
+
+### `RULES_VERSION` 常量（重要）
+
+`shared/rules.js` 中定义了 `RULES_VERSION = '1.0.28'` 常量，用于检测规则是否发生过变化并触发重新计算。当 rules.js 的判定逻辑发生改动时，**必须同时更新两处**：
+
+1. 递增 `shared/rules.js` 中的 `RULES_VERSION` 常量
+2. 递增 `attendance.html` 中 rules.js script 标签的 `?v=` 版本号
+
+只改一处而遗漏另一处会导致浏览器跳过重新计算（`?v=` 未变则缓存命中，`RULES_VERSION` 未变则跳过重新计算流程）。
 
 ## 调试方法
 

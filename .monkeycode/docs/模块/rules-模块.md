@@ -2,6 +2,14 @@
 
 **文件**：`shared/rules.js`
 
+## RULES_VERSION 常量 (v1.0.26)
+
+`const RULES_VERSION = '1.0.28'`，定义于 rules.js 顶部。版本号随每次规则逻辑变更递增。
+
+**用途**：`attendance.html` 的 `loadResults()` 读取该版本号，与 `settings` 表中存储的 `rules_version` 比对。若不一致，说明规则代码已更新，将自动触发重新计算而非使用陈旧的缓存结果。
+
+**存储**：计算完成后将 `RULES_VERSION` 写入 `settings` 表的 `rules_version` 键。
+
 ## 职能
 
 核心规则引擎，执行考勤计算全流程。暴露 `RulesEngine` 对象。
@@ -44,13 +52,20 @@
 4. 获取该员工的排班表
 5. 按日期 (1日 ~ 月末) 遍历每天：
    - `_isWorkDay()` 判断是否休息日
-   - 判断 `status` (normal → rest → leave → travel → normal(漏打卡) → absent → abnormal)
+   - 判断 `status` (normal → rest → leave → travel → normal(漏打卡) → absent → no_sign_in/no_sign_out → abnormal)
    - 计算偏差和加班
    - 产出结果记录 (含 sourcePunchIds 等关联 ID)
 
   **v1.0.25 修复**：两处关键逻辑增加 `isWorkDay` 条件守卫：
   - `missRecord` 仅在上班日 (`isWorkDay`) 时将状态重置为 `normal`，防止休息日的 `suspect_ot` 被漏打卡记录错误覆盖
-  - 迟到判定 (`totalLate > 0`) 仅在上班日 (`isWorkDay`) 时触发 `abnormal`，防止休息日打卡被标记为迟到
+   - 迟到判定 (`totalLate > 0`) 仅在上班日 (`isWorkDay`) 时触发 `abnormal`，防止休息日打卡被标记为迟到
+
+   **v1.0.27 修复**：容错豁免逻辑修正。原先将全月所有 `status === 'abnormal'` 的记录无条件重置为 `normal`，导致未打卡导致的 `abnormal` 也被错误豁免。现在使用 `lateDateSet = new Set(lateRecords.map(r => r.date))`，仅对实际出现在 `lateRecords`（迟到日期列表）中的记录执行复位。
+
+   **v1.0.28 修复**：未打卡状态细分与迟到拦截增强。
+   - 新增 `no_sign_in`（上班未打卡，有签退无签到）和 `no_sign_out`（下班未打卡，有签到无签退）两种细分状态
+   - 判断时机位于 absent 检查之后、迟到检查之前（第 5 步内部）
+   - 迟到判定增加守卫条件 `status !== 'no_sign_in' && status !== 'no_sign_out'`，防止未打卡状态被迟到 (`abnormal`) 覆盖
 6. 全月汇总后执行容错豁免
 7. 更新加班结余 (`_updateCarryOver`)
 8. 清空旧结果 → 写入新结果
