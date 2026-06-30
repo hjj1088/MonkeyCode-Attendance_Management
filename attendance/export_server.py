@@ -36,17 +36,7 @@ def _get_cell_style(val):
     sv = str(val)
     if re.search(r'请假|出差|加班|补卡', sv):
         font = BLUE_FONT
-    elif re.search(r'迟|早', sv):
-        font = RED_FONT
-    
-    return font, fill
-    
-    sv = str(val)
-    if re.search(r'请假|出差|加班|补卡', sv):
-        font = BLUE_FONT
-    elif re.search(r'迟|早', sv):
-        font = RED_FONT
-    elif re.match(r'^\d{1,2}:\d{2}', sv):
+    elif re.search(r'迟|早|上班未打卡|下班未打卡', sv):
         font = RED_FONT
     
     return font, fill
@@ -75,6 +65,7 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
             if use_field('travelHours') and r.get('travelHours'): parts.append(str(r['travelHours']) + 'h')
             return '/'.join(parts)
         if r.get('status') == 'absent' or r.get('absent'): return '缺勤'
+        if r.get('status') == 'no_sign_in': return '上班未打卡'
         if r.get('status') in ('overtime', 'suspect_ot'):
             parts = ['加班']
             if use_field('overtimeHours') and r.get('overtimeHours'): parts.append(str(r['overtimeHours']) + 'h')
@@ -90,6 +81,7 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
         if not r: return ''
         if r.get('status') in ('rest', 'leave', 'travel', 'absent'): return ''
         if r.get('absent'): return ''
+        if r.get('status') == 'no_sign_out': return '下班未打卡'
         if use_field('signOut') and r.get('signOut'):
             val = r['signOut']
             if use_field('earlyMinutes') and r.get('earlyMinutes', 0) > 0:
@@ -261,6 +253,13 @@ def build_flat_report(records, template, filename):
     
     headers = [f['label'] for f in template['fields']]
     
+    status_labels = {
+        'normal': '正常', 'rest': '休息', 'abnormal': '迟到',
+        'leave': '请假', 'travel': '出差', 'absent': '缺勤',
+        'overtime': '加班', 'suspect_ot': '疑似加班',
+        'no_sign_in': '上班未打卡', 'no_sign_out': '下班未打卡',
+    }
+    
     # Write header row
     for c, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=c, value=header)
@@ -279,6 +278,8 @@ def build_flat_report(records, template, filename):
                 val = i + 1
             else:
                 val = rec.get(field_name, '')
+                if field_name == 'status':
+                    val = status_labels.get(val, val)
             
             val_str = str(val) if val is not None else ''
             cell = ws.cell(row=row_idx, column=col_idx, value=val_str)

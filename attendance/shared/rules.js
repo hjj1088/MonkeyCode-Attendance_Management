@@ -1,7 +1,7 @@
 // shared/rules.js
 // 考勤规则引擎 - 迟到/早退/旷工判定、容错、结余计算
 
-const RULES_VERSION = '1.0.27';
+const RULES_VERSION = '1.0.28';
 
 const RulesEngine = {
   async getConfig() {
@@ -231,11 +231,14 @@ const RulesEngine = {
           absent = true;
         }
 
-        if (isWorkDay && hasRealPunch && (!firstSignIn || !lastSignOut) && !leaveRecord && !travelRecord && !missRecord) {
-          status = 'abnormal';
+        if (isWorkDay && hasRealPunch && !firstSignIn && lastSignOut && !leaveRecord && !travelRecord && !missRecord) {
+          status = 'no_sign_in';
+        }
+        if (isWorkDay && hasRealPunch && firstSignIn && !lastSignOut && !leaveRecord && !travelRecord && !missRecord) {
+          status = 'no_sign_out';
         }
 
-        if (totalLate > 0 && hasRealPunch && isWorkDay && status !== 'leave' && status !== 'travel') {
+        if (totalLate > 0 && hasRealPunch && isWorkDay && status !== 'leave' && status !== 'travel' && status !== 'no_sign_in' && status !== 'no_sign_out') {
           lateRecords.push({ date: dateStr, minutes: totalLate });
           status = 'abnormal';
         }

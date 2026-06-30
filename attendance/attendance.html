@@ -14,6 +14,8 @@
     .status-travel { background: #f3e8ff; color: #6b21a8; }
     .status-overtime { background: #fce7f3; color: #9d174d; }
     .status-suspect_ot { background: #fef3c7; color: #92400e; }
+    .status-no_sign_in { background: #fef9c3; color: #854d0e; }
+    .status-no_sign_out { background: #fef9c3; color: #854d0e; }
     .cal-cell { min-height: 80px; transition: all 0.15s; }
     .cal-cell:hover { transform: scale(1.02); z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
   </style>
@@ -188,11 +190,11 @@
     </div>
   </div>
 
-  <script src="./lib/vue.global.prod.js?v=1.0.27"></script>
-  <script src="./lib/dexie.min.js?v=1.0.27"></script>
-  <script src="./shared/auth.js?v=1.0.27"></script>
-  <script src="./shared/db.js?v=1.0.27"></script>
-  <script src="./shared/rules.js?v=1.0.27"></script>
+  <script src="./lib/vue.global.prod.js?v=1.0.28"></script>
+  <script src="./lib/dexie.min.js?v=1.0.28"></script>
+  <script src="./shared/auth.js?v=1.0.28"></script>
+  <script src="./shared/db.js?v=1.0.28"></script>
+  <script src="./shared/rules.js?v=1.0.28"></script>
   <script>
     Auth.requireAuth();
 
@@ -251,11 +253,11 @@
       },
       methods: {
         statusLabel(s) {
-          const map = { normal: '正常', rest: '休息', abnormal: '迟到', leave: '请假', travel: '出差', absent: '缺勤', overtime: '加班', suspect_ot: '疑似加班' };
+          const map = { normal: '正常', rest: '休息', abnormal: '迟到', leave: '请假', travel: '出差', absent: '缺勤', overtime: '加班', suspect_ot: '疑似加班', no_sign_in: '上班未打卡', no_sign_out: '下班未打卡' };
           return map[s] || s;
         },
         statusCellClass(s) {
-          const map = { normal: 'px-2 py-0.5 rounded text-xs status-normal', rest: 'px-2 py-0.5 rounded text-xs status-rest', abnormal: 'px-2 py-0.5 rounded text-xs status-abnormal', leave: 'px-2 py-0.5 rounded text-xs status-leave', travel: 'px-2 py-0.5 rounded text-xs status-travel', absent: 'px-2 py-0.5 rounded text-xs status-absent', overtime: 'px-2 py-0.5 rounded text-xs status-overtime', suspect_ot: 'px-2 py-0.5 rounded text-xs status-suspect_ot' };
+          const map = { normal: 'px-2 py-0.5 rounded text-xs status-normal', rest: 'px-2 py-0.5 rounded text-xs status-rest', abnormal: 'px-2 py-0.5 rounded text-xs status-abnormal', leave: 'px-2 py-0.5 rounded text-xs status-leave', travel: 'px-2 py-0.5 rounded text-xs status-travel', absent: 'px-2 py-0.5 rounded text-xs status-absent', overtime: 'px-2 py-0.5 rounded text-xs status-overtime', suspect_ot: 'px-2 py-0.5 rounded text-xs status-suspect_ot', no_sign_in: 'px-2 py-0.5 rounded text-xs status-no_sign_in', no_sign_out: 'px-2 py-0.5 rounded text-xs status-no_sign_out' };
           return map[s] || '';
         },
         remarkText(r) {
@@ -269,7 +271,6 @@
           if (r.status === 'suspect_ot') { parts.push('疑似加班'); }
           const hasMiss = r.sourceMissIds && r.sourceMissIds.length > 0;
           if (hasMiss) parts.push('补卡');
-          if (r.status === 'abnormal' && (!r.signIn || !r.signOut)) parts.push('缺卡');
           if (r.absent) parts.push('缺勤');
           return parts.join('/');
         },
@@ -413,6 +414,8 @@
               if (firstRecord.status === 'normal') statusClass = 'bg-green-50 border-green-300';
               else if (firstRecord.status === 'rest') statusClass = 'bg-gray-100 border-gray-300';
               else if (firstRecord.status === 'abnormal') statusClass = 'bg-yellow-50 border-yellow-300';
+              else if (firstRecord.status === 'no_sign_in') statusClass = 'bg-yellow-50 border-yellow-300';
+              else if (firstRecord.status === 'no_sign_out') statusClass = 'bg-yellow-50 border-yellow-300';
               else if (firstRecord.status === 'leave') statusClass = 'bg-blue-50 border-blue-300';
               else if (firstRecord.status === 'travel') statusClass = 'bg-purple-50 border-purple-300';
               else if (firstRecord.status === 'absent') statusClass = 'bg-red-50 border-red-300';
