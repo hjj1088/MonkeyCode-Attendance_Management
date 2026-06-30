@@ -1,7 +1,7 @@
 // shared/rules.js
 // 考勤规则引擎 - 迟到/早退/旷工判定、容错、结余计算
 
-const RULES_VERSION = '1.0.26';
+const RULES_VERSION = '1.0.27';
 
 const RulesEngine = {
   async getConfig() {
@@ -270,9 +270,12 @@ const RulesEngine = {
 
       const totalLateMinutes = lateRecords.reduce((sum, r) => sum + r.minutes, 0);
       if (lateRecords.length <= config.graceTimes && totalLateMinutes <= config.graceMinutes) {
+        const lateDateSet = new Set(lateRecords.map(r => r.date));
         for (const r of results.filter(r => r.employeeNo === employeeNo)) {
-          r.lateMinutes = 0;
-          if (r.status === 'abnormal') r.status = 'normal';
+          if (lateDateSet.has(r.date)) {
+            r.lateMinutes = 0;
+            r.status = 'normal';
+          }
         }
       }
 
