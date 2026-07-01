@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>导出中心 - 考勤管理</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Fira Sans', system-ui, sans-serif;
+      background: #F8FAFC;
+      color: #1E293B;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    #sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 240px;
+      background: #fff;
+      border-right: 1px solid #E2E8F0;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.3s ease;
+    }
+
+    #sidebar-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 40;
+    }
+
+    .sidebar-brand {
+      padding: 1.25rem;
+      border-bottom: 1px solid #F1F5F9;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .sidebar-brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #7C3AED;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .sidebar-brand-name {
+      font-weight: 600;
+      font-size: 0.9375rem;
+      color: #1E293B;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 0.75rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .sidebar-nav a {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      text-decoration: none;
+      color: #64748B;
+      transition: all 0.2s;
+    }
+
+    .sidebar-nav a:hover {
+      background: #F1F5F9;
+      color: #1E293B;
+    }
+
+    .sidebar-nav a.active {
+      background: #F5F3FF;
+      color: #7C3AED;
+    }
+
+    .sidebar-footer {
+      padding: 0.75rem;
+      border-top: 1px solid #F1F5F9;
+    }
+
+    .btn-logout {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #64748B;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .btn-logout:hover {
+      color: #EF4444;
+      background: #FEF2F2;
+    }
+
+    /* Main area */
+    .main-wrapper {
+      margin-left: 240px;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .page-header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid #E2E8F0;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .page-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .btn-menu {
+      display: none;
+      padding: 0.5rem;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: #64748B;
+    }
+
+    .btn-menu:hover { background: #F1F5F9; }
+
+    .page-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1E293B;
+    }
+
+    .page-header-right {
+      font-size: 0.875rem;
+      color: #64748B;
+    }
+
+    /* Main content */
+    .page-content {
+      padding: 1.5rem 2rem;
+      max-width: 1440px;
+    }
+
+    /* Three-panel layout */
+    .export-layout {
+      display: grid;
+      grid-template-columns: 220px 1fr 340px;
+      gap: 1.25rem;
+      align-items: start;
+    }
+
+    /* Card */
+    .card {
+      background: #fff;
+      border-radius: 0.875rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #1E293B;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-header-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: #F5F3FF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* Template list */
+    .template-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .template-item {
+      padding: 0.625rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: #475569;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .template-item:hover {
+      background: #F8FAFC;
+      color: #1E293B;
+    }
+
+    .template-item.selected {
+      background: #F5F3FF;
+      color: #7C3AED;
+    }
+
+    .template-item-badge {
+      font-size: 0.6875rem;
+      padding: 0.125rem 0.5rem;
+      border-radius: 100px;
+      background: #F1F5F9;
+      color: #94A3B8;
+      font-weight: 400;
+    }
+
+    .template-item.selected .template-item-badge {
+      background: #EDE9FE;
+      color: #7C3AED;
+    }
+
+    .btn-save-template {
+      width: 100%;
+      margin-top: 0.75rem;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      border: 1.5px dashed #CBD5E1;
+      background: transparent;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: #64748B;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .btn-save-template:hover {
+      border-color: #7C3AED;
+      color: #7C3AED;
+      background: #FAFAFE;
+    }
+
+    /* Field editor */
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      padding: 0.5rem;
+      border-radius: 8px;
+      background: #F8FAFC;
+      transition: background 0.15s;
+    }
+
+    .field-row:hover {
+      background: #F1F5F9;
+    }
+
+    .field-row-number {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: #F1F5F9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: #94A3B8;
+      flex-shrink: 0;
+    }
+
+    .field-input {
+      padding: 0.4375rem 0.625rem;
+      border: 1px solid #E2E8F0;
+      border-radius: 6px;
+      font-size: 0.8125rem;
+      font-family: inherit;
+      color: #1E293B;
+      background: #fff;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    .field-input:focus {
+      border-color: #7C3AED;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+    }
+
+    .field-input-label { width: 120px; }
+    .field-input-select { flex: 1; }
+
+    .btn-remove-field {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: #EF4444;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .btn-remove-field:hover {
+      background: #FEF2F2;
+    }
+
+    .btn-add-field {
+      width: 100%;
+      margin-top: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      border: 1.5px dashed #CBD5E1;
+      background: transparent;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: #64748B;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .btn-add-field:hover {
+      border-color: #7C3AED;
+      color: #7C3AED;
+      background: #FAFAFE;
+    }
+
+    /* Export controls */
+    .export-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid #F1F5F9;
+    }
+
+    .export-select {
+      padding: 0.4375rem 0.75rem;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      font-family: inherit;
+      color: #1E293B;
+      background: #fff;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      outline: none;
+      flex: 1;
+      min-width: 140px;
+    }
+
+    .export-select:focus {
+      border-color: #7C3AED;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+    }
+
+    .btn-export {
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      white-space: nowrap;
+    }
+
+    .btn-export-excel {
+      background: #10B981;
+      color: #fff;
+    }
+
+    .btn-export-excel:hover:not(:disabled) { background: #059669; }
+
+    .btn-export-calendar {
+      background: #7C3AED;
+      color: #fff;
+    }
+
+    .btn-export-calendar:hover:not(:disabled) { background: #6D28D9; }
+
+    .btn-export:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .export-hint {
+      margin-top: 0.75rem;
+      font-size: 0.75rem;
+      color: #94A3B8;
+      line-height: 1.5;
+    }
+
+    /* Preview table */
+    .preview-table-wrap {
+      overflow-x: auto;
+      margin-top: 0.5rem;
+      border-radius: 8px;
+      border: 1px solid #F1F5F9;
+    }
+
+    .preview-table {
+      width: 100%;
+      font-size: 0.75rem;
+      border-collapse: collapse;
+    }
+
+    .preview-table thead th {
+      background: #F8FAFC;
+      padding: 0.5rem 0.625rem;
+      text-align: left;
+      font-weight: 600;
+      color: #475569;
+      white-space: nowrap;
+      border-bottom: 1px solid #E2E8F0;
+    }
+
+    .preview-table tbody td {
+      padding: 0.4375rem 0.625rem;
+      border-bottom: 1px solid #F1F5F9;
+      white-space: nowrap;
+      color: #334155;
+    }
+
+    .preview-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .preview-table tbody tr:hover td {
+      background: #FAFAFE;
+    }
+
+    .preview-empty {
+      text-align: center;
+      color: #94A3B8;
+      font-size: 0.8125rem;
+      padding: 1.5rem 0;
+    }
+
+    /* Responsive */
+    @media (max-width: 1199px) {
+      .export-layout {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .export-layout > .card:last-child {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 767px) {
+      #sidebar {
+        transform: translateX(-100%);
+      }
+
+      #sidebar.open {
+        transform: translateX(0);
+      }
+
+      .main-wrapper {
+        margin-left: 0;
+      }
+
+      .btn-menu {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .page-header {
+        padding: 0.75rem 1rem;
+      }
+
+      .page-content {
+        padding: 1rem;
+      }
+
+      .export-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .export-layout > .card:last-child {
+        grid-column: 1;
+      }
+
+      .export-controls {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar Overlay -->
+    <div id="sidebar-overlay" class="hidden" onclick="AppLayout.closeMenu()"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <span class="sidebar-brand-name">考勤管理</span>
+      </div>
+      <nav id="sidebar-nav" class="sidebar-nav"></nav>
+      <div class="sidebar-footer">
+        <button onclick="Auth.logout()" class="btn-logout">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          退出登录
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-wrapper">
+      <!-- Header -->
+      <header class="page-header">
+        <div class="page-header-left">
+          <button class="btn-menu" onclick="AppLayout.toggleMenu()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <h1 class="page-title">导出中心</h1>
+        </div>
+        <span class="page-header-right" id="header-greeting"></span>
+      </header>
+
+      <!-- Main -->
+      <main class="page-content">
+        <div class="export-layout">
+          <!-- Left Panel: Template List -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-header-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              模板列表
+            </div>
+            <div class="template-list">
+              <div v-for="t in templates" :key="t.id"
+                   @click="selectTemplate(t)"
+                   class="template-item"
+                   :class="{ selected: selectedTemplate && selectedTemplate.id === t.id }">
+                <span>{{ t.name }}</span>
+                <span class="template-item-badge">{{ t.fields.length }} 字段</span>
+              </div>
+              <div v-if="templates.length === 0" class="preview-empty" style="padding:1rem 0">暂无模板</div>
+            </div>
+            <button @click="saveAsTemplate" class="btn-save-template">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              另存为模板
+            </button>
+          </div>
+
+          <!-- Center Panel: Template Editor -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-header-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </div>
+              模板字段编辑
+              <span style="margin-left:auto;font-size:0.75rem;font-weight:400;color:#94A3B8">{{ editingFields.length }} 个字段</span>
+            </div>
+            <div>
+              <div v-for="(field, idx) in editingFields" :key="idx" class="field-row">
+                <span class="field-row-number">{{ idx + 1 }}</span>
+                <input v-model="field.label" class="field-input field-input-label" placeholder="列名">
+                <select v-model="field.field" class="field-input field-input-select">
+                  <option v-for="col in availableColumns" :key="col.field" :value="col.field">{{ col.label }}</option>
+                </select>
+                <button @click="removeField(idx)" class="btn-remove-field" title="删除">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
+              <div v-if="editingFields.length === 0" class="preview-empty" style="padding:1rem 0">请添加导出字段</div>
+            </div>
+            <button @click="addField" class="btn-add-field">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              添加字段
+            </button>
+
+            <!-- Export Controls -->
+            <div class="export-controls">
+              <select v-model="exportMonth" class="export-select">
+                <option value="">导出: 全部月份</option>
+                <option v-for="m in availableMonths" :key="m" :value="m">{{ m }}</option>
+              </select>
+              <button @click="doExport" class="btn-export btn-export-excel">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                导出 Excel
+              </button>
+              <button @click="doCalendarExport" :disabled="!exportMonth" class="btn-export btn-export-calendar">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                导出考勤明细
+              </button>
+            </div>
+            <div class="export-hint">
+              考勤明细：日历格式，按模板字段输出。每天两行（上午/下午），上班打卡和下班打卡分列，含排班标注
+            </div>
+          </div>
+
+          <!-- Right Panel: Data Preview -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-header-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </div>
+              实时预览
+              <span style="margin-left:auto;font-size:0.75rem;font-weight:400;color:#94A3B8">前5条</span>
+            </div>
+            <div class="preview-table-wrap">
+              <table v-if="previewData.length > 0 && editingFields.length > 0" class="preview-table">
+                <thead>
+                  <tr>
+                    <th v-for="f in editingFields" :key="f.field">{{ f.label || f.field }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, ri) in previewData" :key="ri">
+                    <td v-for="f in editingFields" :key="f.field">
+                      {{ f.field === '_index' ? ri + 1 : (row[f.field] !== undefined ? row[f.field] : '') }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-else class="preview-empty">暂无数据预览</div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="./lib/vue.global.prod.js?v=1.0.19"></script>
+  <script src="./lib/dexie.min.js?v=1.0.19"></script>
+  <script src="./lib/xlsx.full.min.js?v=1.0.19"></script>
+  <script src="./shared/auth.js?v=1.0.19"></script>
+  <script src="./shared/db.js?v=1.0.19"></script>
+  <script src="./shared/excel.js?v=1.0.19"></script>
+  <script src="./shared/layout.js?v=1.0.19"></script>
+  <script>
+    Auth.requireAuth();
+
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          templates: [],
+          selectedTemplate: null,
+          editingFields: [],
+          previewData: [],
+          exportMonth: '',
+          availableMonths: [],
+          availableColumns: [
+            { label: '序号(自动)', field: '_index' },
+            { label: '考勤号码', field: 'employeeNo' },
+            { label: '姓名', field: 'name' },
+            { label: '部门', field: 'department' },
+            { label: '日期', field: 'date' },
+            { label: '对应时段', field: 'period' },
+            { label: '上班时间', field: 'scheduleStart' },
+            { label: '下班时间', field: 'scheduleEnd' },
+            { label: '签到时间', field: 'signIn' },
+            { label: '签退时间', field: 'signOut' },
+            { label: '迟到时间', field: 'lateMinutes' },
+            { label: '早退时间', field: 'earlyMinutes' },
+            { label: '加班时间', field: 'overtimeHours' },
+            { label: '出差时间', field: 'travelHours' },
+            { label: '是否旷工', field: 'absent' },
+            { label: '状态', field: 'status' },
+            { label: '请假类型', field: 'leaveType' },
+            { label: '请假小时', field: 'leaveHours' }
+          ]
+        };
+      },
+      async created() {
+        await this.loadTemplates();
+        await this.loadMonths();
+      },
+      methods: {
+        async loadTemplates() {
+          this.templates = await DB.export_templates.toArray();
+          if (this.templates.length > 0) {
+            this.selectTemplate(this.templates[0]);
+          }
+        },
+        selectTemplate(t) {
+          this.selectedTemplate = t;
+          this.editingFields = JSON.parse(JSON.stringify(t.fields));
+          this.updatePreview();
+        },
+        addField() {
+          if (this.availableColumns.length > 0) {
+            this.editingFields.push({ label: '', field: this.availableColumns[0].field });
+          }
+        },
+        removeField(idx) {
+          this.editingFields.splice(idx, 1);
+          this.updatePreview();
+        },
+        async saveAsTemplate() {
+          const name = prompt('请输入模板名称:');
+          if (!name) return;
+          await DB.export_templates.put({
+            name,
+            isDefault: 0,
+            fields: JSON.parse(JSON.stringify(this.editingFields))
+          });
+          await this.loadTemplates();
+        },
+        async updatePreview() {
+          const sampleData = await DB.attendance_results.limit(5).toArray();
+          this.previewData = sampleData;
+        },
+        async loadMonths() {
+          const results = await Store.getAll('attendance_results');
+          const months = new Set(results.filter(r => r.month).map(r => r.month));
+          this.availableMonths = [...months].sort();
+          if (this.availableMonths.length > 0) {
+            this.exportMonth = this.availableMonths[this.availableMonths.length - 1];
+          }
+        },
+        async doExport() {
+          if (this.editingFields.length === 0) {
+            alert('请至少添加一个导出字段');
+            return;
+          }
+          let records;
+          if (this.exportMonth) {
+            records = await Store.getByIndex('attendance_results', 'month', this.exportMonth);
+          } else {
+            records = await Store.getAll('attendance_results');
+          }
+          if (records.length === 0) {
+            alert('没有可导出的数据');
+            return;
+          }
+          const template = { fields: this.editingFields };
+          const filename = this.exportMonth ? `考勤记录_${this.exportMonth}.xlsx` : '考勤记录_全部.xlsx';
+          Excel.exportToExcel(records, template, filename);
+        },
+        async doCalendarExport() {
+          if (!this.exportMonth) {
+            alert('请先选择导出月份');
+            return;
+          }
+          if (this.editingFields.length === 0) {
+            alert('请至少添加一个导出字段');
+            return;
+          }
+          try {
+            await Excel.exportCalendarReport(this.exportMonth, this.editingFields);
+          } catch (err) {
+            alert('导出失败: ' + err.message);
+          }
+        }
+      },
+      watch: {
+        editingFields: { deep: true, handler() { this.updatePreview(); } }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>考勤计算 - 考勤管理</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Fira Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    /* ===== Sidebar ===== */
+    #sidebar-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 40;
+    }
+    #sidebar-overlay.hidden { display: none; }
+    @media (min-width: 1024px) { #sidebar-overlay { display: none !important; } }
+
+    #sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 240px;
+      background: #fff;
+      border-right: 1px solid #e2e8f0;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.3s ease;
+      transform: translateX(-100%);
+    }
+    @media (min-width: 1024px) { #sidebar { transform: translateX(0); } }
+    #sidebar.translate-x-0 { transform: translateX(0); }
+    #sidebar.-translate-x-full { transform: translateX(-100%); }
+
+    .sidebar-brand {
+      padding: 20px;
+      border-bottom: 1px solid #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .sidebar-brand-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: #7C3AED;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .sidebar-brand-text {
+      font-weight: 600;
+      font-size: 0.9375rem;
+      color: #1e293b;
+    }
+    #sidebar-nav {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+    }
+    .sidebar-footer {
+      padding: 12px;
+      border-top: 1px solid #f1f5f9;
+    }
+    .sidebar-logout-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 16px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-family: inherit;
+      color: #64748b;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .sidebar-logout-btn:hover { color: #dc2626; background: #fef2f2; }
+
+    /* ===== Header ===== */
+    .main-wrapper {
+      min-height: 100vh;
+      background: #f8fafc;
+    }
+    @media (min-width: 1024px) { .main-wrapper { margin-left: 240px; } }
+
+    .top-header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: rgba(255,255,255,0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid #e2e8f0;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    @media (max-width: 1023px) { .top-header { padding: 12px 16px; } }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .menu-toggle-btn {
+      padding: 8px;
+      border: none;
+      background: transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+    }
+    .menu-toggle-btn:hover { background: #f1f5f9; }
+    @media (min-width: 1024px) { .menu-toggle-btn { display: none; } }
+
+    .header-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1e293b;
+    }
+    .header-greeting {
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+
+    /* ===== Main Content ===== */
+    .main-content {
+      padding: 24px;
+    }
+    @media (max-width: 1023px) { .main-content { padding: 16px; } }
+
+    /* ===== Card ===== */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+      border: 1px solid #f1f5f9;
+      margin-bottom: 16px;
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: #7C3AED;
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { background: #6D28D9; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-success {
+      background: #059669;
+      color: #fff;
+    }
+    .btn-success:hover:not(:disabled) { background: #047857; }
+    .btn-success:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-warning {
+      background: #d97706;
+      color: #fff;
+    }
+    .btn-warning:hover:not(:disabled) { background: #b45309; }
+    .btn-ghost {
+      background: transparent;
+      color: #64748b;
+      border: 1px solid #e2e8f0;
+    }
+    .btn-ghost:hover { background: #f8fafc; color: #334155; }
+    .btn-outline {
+      background: transparent;
+      color: #64748b;
+      border: 1px solid #e2e8f0;
+      padding: 6px 12px;
+      font-size: 0.75rem;
+    }
+    .btn-outline:hover { background: #f8fafc; color: #334155; }
+    .btn-outline.active {
+      background: #7C3AED;
+      color: #fff;
+      border-color: #7C3AED;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ===== Form Inputs ===== */
+    .input-field {
+      padding: 8px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      font-family: inherit;
+      color: #1e293b;
+      background: #fff;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+      box-sizing: border-box;
+    }
+    .input-field:focus {
+      border-color: #7C3AED;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+    }
+    .select-field {
+      padding: 8px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      font-family: inherit;
+      color: #1e293b;
+      background: #fff;
+      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+      box-sizing: border-box;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 32px;
+    }
+    .select-field:focus {
+      border-color: #7C3AED;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+    }
+
+    /* ===== Alert Banners ===== */
+    .alert {
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 0.8125rem;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .alert-warning {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fcd34d;
+    }
+    .alert-danger {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+    .alert-link {
+      color: inherit;
+      font-weight: 700;
+    }
+
+    /* ===== Filter Bar ===== */
+    .filter-bar {
+      padding: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    /* ===== View Mode Tabs ===== */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .tab-group {
+      display: flex;
+      background: #f1f5f9;
+      border-radius: 8px;
+      padding: 3px;
+    }
+    .tab-btn {
+      padding: 6px 16px;
+      border: none;
+      background: transparent;
+      border-radius: 6px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      font-family: inherit;
+      color: #64748b;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: #fff;
+      color: #7C3AED;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .tab-btn:hover:not(.active) { color: #334155; }
+
+    /* ===== Table ===== */
+    .table-wrap {
+      overflow-x: auto;
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8125rem;
+    }
+    .data-table thead {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .data-table thead th {
+      background: #f8fafc;
+      color: #64748b;
+      font-weight: 600;
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 2px solid #e2e8f0;
+      white-space: nowrap;
+    }
+    .data-table tbody tr {
+      transition: background 0.15s;
+      cursor: pointer;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .data-table tbody tr:nth-child(even) { background: #fafbfc; }
+    .data-table tbody tr:hover { background: #f5f3ff; }
+    .data-table tbody td {
+      padding: 10px 12px;
+      color: #334155;
+      white-space: nowrap;
+    }
+
+    /* ===== Status Badges ===== */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .badge-normal { background: #f3e8ff; color: #6b21a8; }
+    .badge-abnormal { background: #fef9c3; color: #854d0e; }
+    .badge-absent { background: #fee2e2; color: #991b1b; }
+    .badge-rest { background: #f1f5f9; color: #475569; }
+    .badge-leave { background: #dbeafe; color: #1e40af; }
+    .badge-travel { background: #e0e7ff; color: #3730a3; }
+    .badge-overtime { background: #fce7f3; color: #9d174d; }
+    .badge-suspect_ot { background: #fef3c7; color: #92400e; }
+    .badge-no_sign_in { background: #ffedd5; color: #9a3412; }
+    .badge-no_sign_out { background: #ffedd5; color: #9a3412; }
+
+    /* ===== Calendar View ===== */
+    .calendar-employee-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .calendar-employee-bar .select-field { min-width: 200px; }
+    .cal-dept-tag {
+      font-size: 0.8125rem;
+      color: #64748b;
+    }
+    .cal-weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+    .cal-weekday {
+      text-align: center;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #64748b;
+      padding: 8px 0;
+    }
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+    .cal-cell {
+      min-height: 82px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      padding: 6px 8px;
+      font-size: 0.75rem;
+      cursor: default;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .cal-cell.clickable { cursor: pointer; }
+    .cal-cell:hover {
+      transform: scale(1.03);
+      z-index: 10;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    }
+    .cal-cell .cal-day-num {
+      font-weight: 700;
+      font-size: 0.8125rem;
+      margin-bottom: 2px;
+    }
+    .cal-cell .cal-time-row {
+      font-size: 0.6875rem;
+      color: #94a3b8;
+      margin-bottom: 2px;
+    }
+    .cal-cell .cal-holiday {
+      color: #dc2626;
+      font-weight: 600;
+      font-size: 0.6875rem;
+    }
+    .cal-cell .cal-status-label {
+      font-weight: 600;
+      font-size: 0.6875rem;
+      margin-top: 2px;
+    }
+    .cal-cell .cal-rest-label {
+      color: #94a3b8;
+      font-size: 0.6875rem;
+    }
+
+    .cal-normal { background: #f3e8ff; border-color: #c4b5fd; }
+    .cal-rest { background: #f8fafc; border-color: #e2e8f0; }
+    .cal-abnormal { background: #fefce8; border-color: #fde68a; }
+    .cal-leave { background: #dbeafe; border-color: #93c5fd; }
+    .cal-travel { background: #e0e7ff; border-color: #a5b4fc; }
+    .cal-absent { background: #fee2e2; border-color: #fca5a5; }
+    .cal-overtime { background: #fce7f3; border-color: #f9a8d4; }
+    .cal-suspect_ot { background: #fef3c7; border-color: #fcd34d; }
+    .cal-holiday { background: #fee2e2; border-color: #fca5a5; }
+    .cal-empty { background: #fff; border-color: #e2e8f0; }
+    .cal-placeholder { background: #f8fafc; border-color: #e2e8f0; opacity: 0.4; }
+
+    /* ===== Modal ===== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-box {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+      width: 100%;
+      max-width: 800px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .modal-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .modal-close-btn {
+      padding: 8px 20px;
+      background: #f1f5f9;
+      color: #475569;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 16px;
+    }
+    .modal-close-btn:hover { background: #e2e8f0; }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 639px) { .detail-grid { grid-template-columns: 1fr; } }
+    .detail-item {
+      font-size: 0.875rem;
+      color: #334155;
+    }
+    .detail-label {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      text-transform: none;
+      font-weight: 500;
+    }
+    .detail-section-title {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: #334155;
+      margin: 16px 0 8px;
+    }
+    .detail-sub-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8125rem;
+      margin-bottom: 12px;
+    }
+    .detail-sub-table thead th {
+      background: #f8fafc;
+      color: #64748b;
+      font-weight: 600;
+      text-align: left;
+      padding: 6px 10px;
+      border: 1px solid #e2e8f0;
+    }
+    .detail-sub-table tbody td {
+      padding: 6px 10px;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+    }
+
+    /* ===== Empty State ===== */
+    .empty-state {
+      text-align: center;
+      padding: 48px 16px;
+      color: #94a3b8;
+      font-size: 0.875rem;
+    }
+    .empty-state a {
+      color: #7C3AED;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .empty-state a:hover { text-decoration: underline; }
+
+    /* ===== Toast ===== */
+    .toast {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 200;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      animation: toastIn 0.3s ease;
+    }
+    .toast-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+    .toast-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    @keyframes toastIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar Overlay -->
+    <div id="sidebar-overlay" class="hidden" onclick="AppLayout.closeMenu()"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <span class="sidebar-brand-text">考勤管理</span>
+      </div>
+      <nav id="sidebar-nav"></nav>
+      <div class="sidebar-footer">
+        <button onclick="Auth.logout()" class="sidebar-logout-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          退出登录
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-wrapper">
+      <!-- Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <button onclick="AppLayout.toggleMenu()" class="menu-toggle-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <h1 class="header-title">考勤计算</h1>
+        </div>
+        <span id="header-greeting" class="header-greeting"></span>
+      </header>
+
+      <!-- Main -->
+      <div class="main-content">
+        <!-- Filter Bar -->
+        <div class="card filter-bar">
+          <input v-model="currentMonth" type="month" class="input-field">
+          <select v-model="filterDept" class="select-field">
+            <option value="">全部部门</option>
+            <option v-for="d in departments" :key="d" :value="d">{{ d }}</option>
+          </select>
+          <select v-model="filterStatus" class="select-field">
+            <option value="">全部状态</option>
+            <option value="normal">正常</option>
+            <option value="rest">休息</option>
+            <option value="abnormal">迟到</option>
+            <option value="leave">请假</option>
+            <option value="travel">出差</option>
+            <option value="absent">缺勤</option>
+            <option value="overtime">加班</option>
+            <option value="suspect_ot">疑似加班</option>
+          </select>
+          <input v-model="searchName" type="text" placeholder="搜索姓名" class="input-field" style="width:140px">
+        </div>
+
+        <!-- Config Changed Warning -->
+        <div v-if="configChanged" class="alert alert-warning">
+          <span>考勤规则已变更，当前结果可能不是最新规则计算的。</span>
+          <button @click="runCalculation" class="btn btn-warning">重新计算</button>
+        </div>
+
+        <!-- Schedule Missing Warning -->
+        <div v-if="scheduleMissing" class="alert alert-danger">
+          未找到{{ currentMonth }}排班数据，所有日期默认视为上班日。请前往 <a href="import.html" class="alert-link">数据导入</a> 上传排班表。
+        </div>
+
+        <!-- Toolbar: View Mode Tabs + Recalculate -->
+        <div class="toolbar">
+          <div class="tab-group">
+            <button :class="['tab-btn', viewMode === 'list' ? 'active' : '']" @click="viewMode = 'list'">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              列表视图
+            </button>
+            <button :class="['tab-btn', viewMode === 'calendar' ? 'active' : '']" @click="viewMode = 'calendar'">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              日历视图
+            </button>
+          </div>
+          <button @click="runCalculation" :disabled="calculating" class="btn btn-primary">
+            <span v-if="calculating" class="loading-spinner"></span>
+            {{ calculating ? '计算中...' : '重新计算' }}
+          </button>
+        </div>
+
+        <!-- List View -->
+        <div v-if="viewMode === 'list'" class="card" style="overflow:hidden">
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>考勤号</th>
+                  <th>姓名</th>
+                  <th>部门</th>
+                  <th>日期</th>
+                  <th>排班</th>
+                  <th>签到</th>
+                  <th>签退</th>
+                  <th>迟到(min)</th>
+                  <th>早退(min)</th>
+                  <th>加班(h)</th>
+                  <th>备注</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in filteredResults" :key="r.employeeNo + r.date" @click="showDetail(r)">
+                  <td>{{ r.employeeNo }}</td>
+                  <td>{{ r.name }}</td>
+                  <td>{{ r.department }}</td>
+                  <td>{{ r.date }}</td>
+                  <td>{{ holidayMap[r.date] ? holidayMap[r.date].name : (r.isRestDay ? '休息' : '上班') }}</td>
+                  <td>{{ r.signIn }}</td>
+                  <td>{{ r.signOut }}</td>
+                  <td>{{ r.lateMinutes }}</td>
+                  <td>{{ r.earlyMinutes }}</td>
+                  <td>{{ r.overtimeHours }}</td>
+                  <td style="font-size:0.75rem">{{ remarkText(r) }}</td>
+                  <td>
+                    <span :class="statusCellClass(r.status)">{{ statusLabel(r.status) }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="filteredResults.length === 0" class="empty-state">
+            暂无数据，请先 <a href="import.html">导入数据</a> 后计算
+          </div>
+        </div>
+
+        <!-- Calendar View -->
+        <div v-if="viewMode === 'calendar'" class="card" style="padding:20px">
+          <div class="calendar-employee-bar">
+            <span style="font-size:0.8125rem;color:#64748b">当前员工:</span>
+            <select v-model="calEmployee" @change="buildCalendar" class="select-field" style="min-width:220px">
+              <option value="">-- 全部 --</option>
+              <option v-for="emp in calendarEmployees" :key="emp.employeeNo" :value="emp.employeeNo">{{ emp.name }} ({{ emp.employeeNo }})</option>
+            </select>
+            <span v-if="calEmployee && calEmployeeInfo" class="cal-dept-tag">{{ calEmployeeInfo.department }}</span>
+          </div>
+          <div class="cal-weekdays">
+            <div v-for="day in ['一','二','三','四','五','六','日']" :key="day" class="cal-weekday">{{ day }}</div>
+          </div>
+          <div class="cal-grid">
+            <div v-for="cell in calendarCells" :key="cell.key"
+                 class="cal-cell"
+                 :class="[cell.statusClass, cell.record ? 'clickable' : '']"
+                 @click="cell.record && showDetail(cell.record)">
+              <div class="cal-day-num">{{ cell.day }}</div>
+              <template v-if="cell.record">
+                <div class="cal-time-row">{{ cell.record.signIn || '--' }} / {{ cell.record.signOut || '--' }}</div>
+                <div v-if="cell.record.isRestDay && !cell.holidayName" class="cal-rest-label">休息日</div>
+                <div v-if="cell.holidayName" class="cal-holiday">{{ cell.holidayName }}</div>
+                <div v-if="cell.record.status !== 'normal' && cell.record.status !== 'rest'" class="cal-status-label" :style="{color: statusColor(cell.record.status)}">{{ statusLabel(cell.record.status) }}</div>
+              </template>
+              <template v-if="!cell.record && cell.holidayName">
+                <div class="cal-holiday" style="margin-top:4px">{{ cell.holidayName }}</div>
+              </template>
+              <div v-else-if="!cell.record && cell.isRest" class="cal-rest-label" style="margin-top:4px">休息</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detail Modal -->
+        <div v-if="detail" class="modal-overlay" @click.self="detail = null">
+          <div class="modal-box">
+            <h3 class="modal-title">{{ detail.name }} - {{ detail.date }} 详情</h3>
+            <div class="detail-grid">
+              <div class="detail-item"><span class="detail-label">考勤号</span><br>{{ detail.employeeNo }}</div>
+              <div class="detail-item"><span class="detail-label">部门</span><br>{{ detail.department }}</div>
+              <div class="detail-item"><span class="detail-label">签到</span><br>{{ detail.signIn || '--' }}</div>
+              <div class="detail-item"><span class="detail-label">签退</span><br>{{ detail.signOut || '--' }}</div>
+              <div class="detail-item"><span class="detail-label">迟到</span><br>{{ detail.lateMinutes }}min</div>
+              <div class="detail-item"><span class="detail-label">早退</span><br>{{ detail.earlyMinutes }}min</div>
+              <div class="detail-item"><span class="detail-label">加班</span><br>{{ detail.overtimeHours }}h</div>
+              <div class="detail-item"><span class="detail-label">出差</span><br>{{ detail.travelHours }}h</div>
+              <div class="detail-item"><span class="detail-label">请假类型</span><br>{{ detail.leaveType || '--' }}<span v-if="detail.leaveHours"> ({{ detail.leaveHours }}h)</span></div>
+              <div class="detail-item"><span class="detail-label">状态</span><br><span :class="statusCellClass(detail.status)">{{ statusLabel(detail.status) }}</span></div>
+              <div class="detail-item"><span class="detail-label">排班</span><br>{{ detail.isRestDay ? '休息' : '上班' }}</div>
+            </div>
+            <div v-if="detail.sourcePunches && detail.sourcePunches.length">
+              <h4 class="detail-section-title">关联打卡记录</h4>
+              <table class="detail-sub-table">
+                <thead><tr><th>签到</th><th>签退</th><th>迟到</th><th>早退</th></tr></thead>
+                <tbody><tr v-for="p in detail.sourcePunches" :key="p.id"><td>{{ p.signIn }}</td><td>{{ p.signOut }}</td><td>{{ p.lateMinutes }}</td><td>{{ p.earlyMinutes }}</td></tr></tbody>
+              </table>
+            </div>
+            <div v-if="detail.sourceLeaves && detail.sourceLeaves.length">
+              <h4 class="detail-section-title">关联请假记录</h4>
+              <table class="detail-sub-table">
+                <thead><tr><th>类型</th><th>开始</th><th>结束</th><th>天数</th><th>小时</th></tr></thead>
+                <tbody><tr v-for="l in detail.sourceLeaves" :key="l.id"><td>{{ l.leaveType }}</td><td>{{ l.startDate }}</td><td>{{ l.endDate }}</td><td>{{ l.leaveDays }}</td><td>{{ l.leaveHours }}</td></tr></tbody>
+              </table>
+            </div>
+            <div v-if="detail.sourceTravels && detail.sourceTravels.length">
+              <h4 class="detail-section-title">关联出差记录</h4>
+              <table class="detail-sub-table">
+                <thead><tr><th>开始</th><th>结束</th><th>目的地</th><th>事由</th></tr></thead>
+                <tbody><tr v-for="t in detail.sourceTravels" :key="t.id"><td>{{ t.startDate }}</td><td>{{ t.endDate }}</td><td>{{ t.destination }}</td><td>{{ t.reason }}</td></tr></tbody>
+              </table>
+            </div>
+            <div v-if="detail.sourceMisses && detail.sourceMisses.length">
+              <h4 class="detail-section-title">关联漏打卡说明</h4>
+              <table class="detail-sub-table">
+                <thead><tr><th>日期</th><th>说明</th></tr></thead>
+                <tbody><tr v-for="m in detail.sourceMisses" :key="m.id"><td>{{ m.missDate }}</td><td>{{ m.reason }}</td></tr></tbody>
+              </table>
+            </div>
+            <div v-if="detail.sourceOvertimes && detail.sourceOvertimes.length">
+              <h4 class="detail-section-title">关联加班记录</h4>
+              <table class="detail-sub-table">
+                <thead><tr><th>开始</th><th>结束</th><th>小时</th><th>内容</th></tr></thead>
+                <tbody><tr v-for="o in detail.sourceOvertimes" :key="o.id"><td>{{ o.startTime }}</td><td>{{ o.endTime }}</td><td>{{ o.overtimeHours }}</td><td>{{ o.content }}</td></tr></tbody>
+              </table>
+            </div>
+            <button @click="detail = null" class="modal-close-btn">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./lib/vue.global.prod.js?v=2.0.0"></script>
+  <script src="./lib/dexie.min.js?v=2.0.0"></script>
+  <script src="./shared/auth.js?v=2.0.0"></script>
+  <script src="./shared/db.js?v=2.0.0"></script>
+  <script src="./shared/rules.js?v=2.0.0"></script>
+  <script src="./shared/layout.js?v=2.0.0"></script>
+  <script>
+    Auth.requireAuth();
+
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          viewMode: 'list',
+          calculating: false,
+          configChanged: false,
+          scheduleMissing: false,
+          currentMonth: '',
+          filterDept: '',
+          filterStatus: '',
+          searchName: '',
+          results: [],
+          detail: null,
+          departments: [],
+          calendarCells: [],
+          calEmployee: '',
+          calendarEmployees: [],
+          holidayMap: {}
+        };
+      },
+      computed: {
+        filteredResults() {
+          let list = this.results;
+          if (this.filterDept) list = list.filter(r => r.department === this.filterDept);
+          if (this.filterStatus) list = list.filter(r => r.status === this.filterStatus);
+          if (this.searchName) list = list.filter(r => r.name.includes(this.searchName));
+          list = [...list].sort((a, b) => {
+            if (a.employeeNo !== b.employeeNo) {
+              const na = parseInt(a.employeeNo) || 0;
+              const nb = parseInt(b.employeeNo) || 0;
+              if (na !== nb) return na - nb;
+              return String(a.employeeNo).localeCompare(String(b.employeeNo));
+            }
+            if (a.department !== b.department) return a.department.localeCompare(b.department);
+            return a.date.localeCompare(b.date);
+          });
+          return list;
+        },
+        calEmployeeInfo() {
+          if (!this.calEmployee) return null;
+          const r = this.results.find(r => r.employeeNo === this.calEmployee);
+          return r ? { name: r.name, department: r.department } : null;
+        }
+      },
+      async created() {
+        this.currentMonth = await this.detectDataMonth();
+        await this.loadResults();
+      },
+      watch: {
+        currentMonth() { this.loadResults(); },
+        viewMode() { if (this.viewMode === 'calendar') this.buildCalendar(); }
+      },
+      methods: {
+        statusLabel(s) {
+          const map = { normal: '正常', rest: '休息', abnormal: '迟到', leave: '请假', travel: '出差', absent: '缺勤', overtime: '加班', suspect_ot: '疑似加班', no_sign_in: '上班未打卡', no_sign_out: '下班未打卡' };
+          return map[s] || s;
+        },
+        statusCellClass(s) {
+          const map = { normal: 'badge badge-normal', rest: 'badge badge-rest', abnormal: 'badge badge-abnormal', leave: 'badge badge-leave', travel: 'badge badge-travel', absent: 'badge badge-absent', overtime: 'badge badge-overtime', suspect_ot: 'badge badge-suspect_ot', no_sign_in: 'badge badge-no_sign_in', no_sign_out: 'badge badge-no_sign_out' };
+          return map[s] || '';
+        },
+        statusColor(s) {
+          const map = { abnormal: '#854d0e', leave: '#1e40af', travel: '#3730a3', absent: '#991b1b', overtime: '#9d174d', suspect_ot: '#92400e', no_sign_in: '#9a3412', no_sign_out: '#9a3412' };
+          return map[s] || '#64748b';
+        },
+        remarkText(r) {
+          const parts = [];
+          if (r.leaveType) { parts.push(r.leaveType + (r.leaveHours ? r.leaveHours + 'h' : '')); }
+          else if (r.sourceLeaveIds && r.sourceLeaveIds.length > 0) { parts.push('请假'); }
+          if (r.travelHours > 0 || (r.sourceTravelIds && r.sourceTravelIds.length > 0)) { parts.push('出差'); }
+          if (r.overtimeHours > 0 && r.status !== 'leave' && r.status !== 'travel') { parts.push('加班' + r.overtimeHours + 'h'); }
+          else if (r.status === 'overtime') { parts.push('加班' + (r.overtimeHours || '') + 'h'); }
+          else if (r.sourceOvertimeIds && r.sourceOvertimeIds.length > 0) { parts.push('有加班'); }
+          if (r.status === 'suspect_ot') { parts.push('疑似加班'); }
+          const hasMiss = r.sourceMissIds && r.sourceMissIds.length > 0;
+          if (hasMiss) parts.push('补卡');
+          if (r.absent) parts.push('缺勤');
+          return parts.join('/');
+        },
+        async detectDataMonth() {
+          const punches = await Store.getAll('punch_records');
+          if (punches.length === 0) {
+            const now = new Date();
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          }
+          const dates = punches.map(p => {
+            const m = (p.date || '').match(/^(\d{4})-(\d{2})/);
+            return m ? m[1] + '-' + m[2] : null;
+          }).filter(Boolean).sort();
+          return dates[dates.length - 1];
+        },
+        async loadResults() {
+          this.results = await RulesEngine.getMonthResults(this.currentMonth);
+          if (this.results.length === 0) {
+            const punches = await Store.getAll('punch_records');
+            const hasData = punches.some(p => p.date && p.date.startsWith(this.currentMonth));
+            if (hasData) await this.runCalculation();
+          } else {
+            const configEntry = await Store.getByKey('settings', 'config_updated_at');
+            if (configEntry && configEntry.value) {
+              const savedAt = new Date(configEntry.value).toISOString();
+              const lastResults = this.results[0];
+              if (lastResults && lastResults.month === this.currentMonth) {
+                const calcTime = await Store.getByKey('settings', 'last_calc_' + this.currentMonth);
+                if (!calcTime || (calcTime.value < configEntry.value)) {
+                  this.configChanged = true;
+                }
+              }
+            }
+            const rulesVerEntry = await Store.getByKey('settings', 'rules_version');
+            if (!rulesVerEntry || rulesVerEntry.value !== RULES_VERSION) {
+              await Store.put('settings', { key: 'rules_version', value: RULES_VERSION });
+              await this.runCalculation();
+              return;
+            }
+          }
+          const [y, m] = this.currentMonth.split('-').map(Number);
+          const schedCount = await DB.schedules.where('[employeeNo+year+month]').between([0, y, m], ['\uffff', y, m], true, true).count();
+          this.scheduleMissing = schedCount === 0 && this.results.length > 0;
+          const holidays = await Store.getAll('holidays');
+          this.holidayMap = {};
+          for (const h of holidays) {
+            if (h.date && h.date.startsWith(this.currentMonth)) {
+              this.holidayMap[h.date] = h;
+            }
+          }
+          if (this.viewMode === 'calendar') await this.buildCalendar();
+          const empSet = new Map();
+          for (const r of this.results) {
+            if (!empSet.has(r.employeeNo)) empSet.set(r.employeeNo, { employeeNo: r.employeeNo, name: r.name, department: r.department });
+          }
+          this.calendarEmployees = [...empSet.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+          const depts = new Set(this.results.map(r => r.department).filter(Boolean));
+          this.departments = [...depts].sort();
+        },
+        async runCalculation() {
+          this.calculating = true;
+          this.configChanged = false;
+          try {
+            await RulesEngine.calculateMonth(this.currentMonth);
+            await Store.put('settings', { key: 'last_calc_' + this.currentMonth, value: Date.now() });
+            await this.loadResults();
+          } catch (err) {
+            alert('计算出错: ' + err.message);
+          }
+          this.calculating = false;
+        },
+        async buildCalendar() {
+          const [y, m] = this.currentMonth.split('-').map(Number);
+          const firstDay = new Date(y, m - 1, 1);
+          const lastDate = new Date(y, m, 0).getDate();
+          const startDow = firstDay.getDay() || 7;
+          const cells = [];
+
+          let scheduleMap = {};
+          if (this.calEmployee) {
+            const allSchedules = await Store.getByIndex('schedules', 'year', y);
+            for (const s of allSchedules) {
+              if (s.month !== m) continue;
+              if (s.employeeNo === this.calEmployee) {
+                scheduleMap[this.calEmployee] = s;
+                break;
+              }
+            }
+          } else {
+            const allSchedules = await Store.getByIndex('schedules', 'year', y);
+            for (const s of allSchedules) {
+              if (s.month !== m) continue;
+              if (!scheduleMap[s.employeeNo]) scheduleMap[s.employeeNo] = s;
+            }
+          }
+
+          const holidays = await Store.getAll('holidays');
+          const holidayMap = {};
+          for (const h of holidays) {
+            if (h.date && h.date.startsWith(this.currentMonth)) {
+              holidayMap[h.date] = h;
+            }
+          }
+
+          for (let i = 1; i < startDow; i++) {
+            cells.push({ key: 'prev-' + i, day: '', isRest: false, record: null, statusClass: 'cal-placeholder' });
+          }
+          for (let d = 1; d <= lastDate; d++) {
+            const dateStr = `${this.currentMonth}-${String(d).padStart(2, '0')}`;
+            const dayRecords = this.results.filter(r => {
+              if (this.calEmployee && r.employeeNo !== this.calEmployee) return false;
+              return r.date === dateStr;
+            });
+            const day = String(d).padStart(2, '0');
+
+            let isRest = false;
+            let holidayName = null;
+            const holiday = holidayMap[dateStr];
+            if (holiday) {
+              isRest = !holiday.isWorkday;
+              holidayName = holiday.name;
+            } else if (this.calEmployee) {
+              const sch = scheduleMap[this.calEmployee];
+              if (sch && sch.workDays) {
+                isRest = sch.workDays[day] !== true;
+              }
+            } else {
+              const employeeNos = [...new Set(this.results.map(r => r.employeeNo))];
+              let allRest = true;
+              let hasSchedule = false;
+              for (const eno of employeeNos) {
+                const sch = scheduleMap[eno];
+                if (sch && sch.workDays) { hasSchedule = true; if (sch.workDays[day]) allRest = false; }
+              }
+              isRest = hasSchedule && allRest;
+            }
+
+            let statusClass = 'cal-empty';
+            const firstRecord = dayRecords[0];
+            if (firstRecord) {
+              if (firstRecord.status === 'normal') statusClass = 'cal-normal';
+              else if (firstRecord.status === 'rest') statusClass = 'cal-rest';
+              else if (firstRecord.status === 'abnormal') statusClass = 'cal-abnormal';
+              else if (firstRecord.status === 'no_sign_in') statusClass = 'cal-abnormal';
+              else if (firstRecord.status === 'no_sign_out') statusClass = 'cal-abnormal';
+              else if (firstRecord.status === 'leave') statusClass = 'cal-leave';
+              else if (firstRecord.status === 'travel') statusClass = 'cal-travel';
+              else if (firstRecord.status === 'absent') statusClass = 'cal-absent';
+              else if (firstRecord.status === 'overtime') statusClass = 'cal-overtime';
+              else if (firstRecord.status === 'suspect_ot') statusClass = 'cal-suspect_ot';
+            } else if (holidayName) {
+              statusClass = 'cal-holiday';
+            } else if (isRest) {
+              statusClass = 'cal-rest';
+            }
+
+            cells.push({ key: dateStr, day: d, isRest, record: firstRecord || null, statusClass, holidayName });
+          }
+          this.calendarCells = cells;
+        },
+        async showDetail(r) {
+          this.detail = await RulesEngine.getResultDetail(r.employeeNo, r.date);
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

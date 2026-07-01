@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系统设置 - 考勤管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Fira Sans', system-ui, sans-serif; }
+    .card {
+      background: #fff;
+      border-radius: 0.75rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+      padding: 1.5rem;
+    }
+    .btn-primary {
+      background: #7C3AED;
+      color: #fff;
+      padding: 0.5rem 1.25rem;
+      border-radius: 0.5rem;
+      font-weight: 500;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-primary:hover:not(:disabled) { background: #6D28D9; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-danger {
+      background: #EF4444;
+      color: #fff;
+      padding: 0.5rem 1.25rem;
+      border-radius: 0.5rem;
+      font-weight: 500;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-danger:hover:not(:disabled) { background: #DC2626; }
+    .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+    .input-field {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #E2E8F0;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      font-family: inherit;
+      color: #1E293B;
+      transition: border-color 0.2s;
+      box-sizing: border-box;
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: #7C3AED;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+    }
+    .input-field:disabled {
+      background: #F8FAFC;
+      color: #64748B;
+    }
+    .section-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1E293B;
+      margin-bottom: 1rem;
+    }
+    .form-label {
+      display: block;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: #475569;
+      margin-bottom: 0.25rem;
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-box {
+      background: #fff;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      max-width: 28rem;
+      width: 90%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    }
+    .toast {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 200;
+      padding: 0.75rem 1.25rem;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      animation: slideIn 0.3s ease;
+    }
+    .toast-success { background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; }
+    .toast-error { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans" style="font-family:'Fira Sans',system-ui,sans-serif">
+  <div id="app">
+    <!-- Sidebar Overlay -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" onclick="AppLayout.closeMenu()"></div>
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-60 bg-white border-r border-slate-200 z-50 flex flex-col transition-transform duration-300 lg:translate-x-0 -translate-x-full">
+      <div class="p-5 border-b border-slate-100">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <span class="font-semibold text-slate-800">考勤管理</span>
+        </div>
+      </div>
+      <nav id="sidebar-nav" class="flex-1 p-3 space-y-1 overflow-y-auto"></nav>
+      <div class="p-3 border-t border-slate-100">
+        <button onclick="Auth.logout()" class="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          退出登录
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="lg:ml-60 min-h-screen bg-slate-50">
+      <!-- Header -->
+      <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200 px-4 lg:px-8 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <button onclick="AppLayout.toggleMenu()" class="lg:hidden p-2 rounded-lg hover:bg-slate-100 cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <h1 class="text-lg font-semibold text-slate-800">系统设置</h1>
+        </div>
+        <span id="header-greeting" class="text-sm text-slate-500"></span>
+      </header>
+
+      <!-- Main -->
+      <main class="p-4 lg:p-8 max-w-2xl">
+        <!-- Toast message -->
+        <div v-if="toast.show" :class="'toast toast-' + toast.type">
+          <span v-if="toast.type === 'success'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </span>
+          <span v-if="toast.type === 'error'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          </span>
+          {{ toast.message }}
+        </div>
+
+        <!-- Section 1: Admin Password -->
+        <div class="card mb-6">
+          <h2 class="section-title">管理员密码</h2>
+          <div class="space-y-4">
+            <div>
+              <label class="form-label">当前账号</label>
+              <input v-model="passwordForm.username" type="text" class="input-field" disabled>
+            </div>
+            <div>
+              <label class="form-label">旧密码</label>
+              <input v-model="passwordForm.oldPassword" type="password" class="input-field" placeholder="请输入当前密码">
+            </div>
+            <div>
+              <label class="form-label">新密码</label>
+              <input v-model="passwordForm.newPassword" type="password" class="input-field" placeholder="请输入新密码" @input="passwordForm.confirmError = ''">
+            </div>
+            <div>
+              <label class="form-label">确认新密码</label>
+              <input v-model="passwordForm.confirmPassword" type="password" class="input-field" placeholder="请再次输入新密码" @input="passwordForm.confirmError = ''">
+              <p v-if="passwordForm.confirmError" class="text-red-500 text-xs mt-1">{{ passwordForm.confirmError }}</p>
+            </div>
+          </div>
+          <button @click="changePassword" :disabled="passwordForm.saving" class="btn-primary mt-4">
+            <span v-if="passwordForm.saving" class="flex items-center gap-2">
+              <svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/><path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>
+              修改中...
+            </span>
+            <span v-else>修改密码</span>
+          </button>
+        </div>
+
+        <!-- Section 2: Data Management -->
+        <div class="card mb-6">
+          <h2 class="section-title">数据管理</h2>
+          <p class="text-sm text-slate-500 mb-4">
+            清空所有导入的考勤数据和分析结果，保留系统设置和考勤规则配置。此操作不可恢复。
+          </p>
+          <button @click="resetDatabase" :disabled="resetSaving" class="btn-danger">
+            <span v-if="resetSaving" class="flex items-center gap-2">
+              <svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/><path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>
+              重置中...
+            </span>
+            <span v-else>重置数据库</span>
+          </button>
+        </div>
+
+        <!-- Section 3: About -->
+        <div class="card mb-6">
+          <h2 class="section-title">关于系统</h2>
+          <div class="space-y-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div>
+                <div class="font-semibold text-slate-800">考勤管理系统 v2.0</div>
+                <div class="text-xs text-slate-400">最后更新：2026-07-01</div>
+              </div>
+            </div>
+            <div class="pt-3 border-t border-slate-100">
+              <p class="text-sm text-slate-500">技术栈</p>
+              <div class="flex flex-wrap gap-2 mt-2">
+                <span class="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-full text-xs font-medium">Vue 3</span>
+                <span class="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-full text-xs font-medium">Dexie.js</span>
+                <span class="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-full text-xs font-medium">Python openpyxl</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Reset Confirm Modal (step 1) -->
+    <div v-if="resetModal.step === 1" class="modal-overlay" @click.self="resetModal.step = 0">
+      <div class="modal-box">
+        <h3 class="text-lg font-semibold text-slate-800 mb-2">确认重置数据库</h3>
+        <p class="text-sm text-slate-600 mb-4">此操作将清空所有导入的考勤数据和分析结果，系统设置和考勤规则将被保留。确定要继续吗？</p>
+        <div class="flex justify-end gap-3">
+          <button @click="resetModal.step = 0" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">取消</button>
+          <button @click="resetModal.step = 2" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">确定重置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reset Confirm Modal (step 2 - double confirm) -->
+    <div v-if="resetModal.step === 2" class="modal-overlay" @click.self="resetModal.step = 0">
+      <div class="modal-box">
+        <h3 class="text-lg font-semibold text-slate-800 mb-2">再次确认</h3>
+        <p class="text-sm text-slate-600 mb-4">此操作不可恢复！请再次确认是否要清空所有数据？</p>
+        <div class="flex justify-end gap-3">
+          <button @click="resetModal.step = 0" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">取消</button>
+          <button @click="executeReset" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">确认清空</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./lib/vue.global.prod.js?v=2.0.0"></script>
+  <script src="./lib/dexie.min.js?v=2.0.0"></script>
+  <script src="./shared/auth.js?v=2.0.0"></script>
+  <script src="./shared/db.js?v=2.0.0"></script>
+  <script src="./shared/layout.js?v=2.0.0"></script>
+  <script>
+    Auth.requireAuth();
+
+    const { createApp } = Vue;
+
+    function getStoredCredentials() {
+      try {
+        const raw = localStorage.getItem('attendance_credentials');
+        if (raw) return JSON.parse(raw);
+      } catch (e) {}
+      return null;
+    }
+
+    function saveCredentials(username, password) {
+      localStorage.setItem('attendance_credentials', JSON.stringify({ username, password }));
+    }
+
+    function getCurrentCredentials() {
+      const stored = getStoredCredentials();
+      if (stored) return stored;
+      return { username: DEFAULT_CREDENTIALS.username, password: DEFAULT_CREDENTIALS.password };
+    }
+
+    createApp({
+      data() {
+        return {
+          passwordForm: {
+            username: getCurrentCredentials().username,
+            oldPassword: '',
+            newPassword: '',
+            confirmPassword: '',
+            confirmError: '',
+            saving: false
+          },
+          resetSaving: false,
+          resetModal: { step: 0 },
+          toast: { show: false, type: 'success', message: '', timer: null }
+        };
+      },
+      methods: {
+        showToast(type, message) {
+          if (this.toast.timer) clearTimeout(this.toast.timer);
+          this.toast = { show: true, type, message, timer: null };
+          this.toast.timer = setTimeout(() => { this.toast.show = false; }, 4000);
+        },
+
+        async changePassword() {
+          const f = this.passwordForm;
+          f.confirmError = '';
+
+          if (!f.oldPassword) {
+            this.showToast('error', '请输入旧密码');
+            return;
+          }
+
+          const current = getCurrentCredentials();
+          if (f.oldPassword !== current.password) {
+            this.showToast('error', '旧密码错误');
+            return;
+          }
+
+          if (!f.newPassword || f.newPassword.length < 4) {
+            this.showToast('error', '新密码长度不能少于4位');
+            return;
+          }
+
+          if (f.newPassword !== f.confirmPassword) {
+            f.confirmError = '两次输入的新密码不一致';
+            return;
+          }
+
+          f.saving = true;
+          try {
+            saveCredentials(f.username, f.newPassword);
+            this.showToast('success', '密码修改成功');
+            f.oldPassword = '';
+            f.newPassword = '';
+            f.confirmPassword = '';
+          } catch (err) {
+            this.showToast('error', '密码修改失败: ' + err.message);
+          }
+          f.saving = false;
+        },
+
+        resetDatabase() {
+          this.resetModal.step = 1;
+        },
+
+        async executeReset() {
+          this.resetModal.step = 0;
+          this.resetSaving = true;
+          try {
+            await Store.resetAllData();
+            this.showToast('success', '数据库已重置，所有数据已清空');
+          } catch (err) {
+            this.showToast('error', '重置失败: ' + err.message);
+          }
+          this.resetSaving = false;
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
