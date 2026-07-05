@@ -82,4 +82,33 @@
 
 3. **调休消耗**：请假类型包含"调休"时同时影响当日加班值和月结余。
 
+4. **工作时长计算 (v2.0 新增)**：每人每天根据 `signIn` 和 `signOut` 计算实际工作时长 `workHours`（精确到 0.01 小时），存储于 `attendance_results` 表中。
+
+## 结果对象字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| employeeNo | string | 考勤号 |
+| name | string | 姓名 |
+| department | string | 部门 |
+| date | string | 日期 (YYYY-MM-DD) |
+| signIn | string | 签到时间 |
+| signOut | string | 签退时间 |
+| lateMinutes | number | 迟到分钟 |
+| earlyMinutes | number | 早退分钟 |
+| overtimeHours | number | 加班小时 |
+| travelHours | number | 出差小时 |
+| leaveHours | number | 请假小时 |
+| workHours | number | 实际工作时长 (v2.0) |
+| absent | boolean | 是否旷工 |
+| status | string | 考勤状态 |
+| leaveType | string | 请假类型 |
+| isRestDay | boolean | 是否休息日 |
+| month | string | 月份 |
+| sourcePunchIds | array | 关联打卡记录 ID |
+| sourceLeaveIds | array | 关联请假记录 ID |
+| sourceTravelIds | array | 关联出差记录 ID |
+| sourceMissIds | array | 关联漏打卡记录 ID |
+| sourceOvertimeIds | array | 关联加班记录 ID (v2.0) |
+
 4. **结余月份键**：使用 `prevMonthKey = targetMonth - 2个月` 而非上个月，因为当前月的结果尚未写入 carry_over 表，需跳过一个月的 gap。

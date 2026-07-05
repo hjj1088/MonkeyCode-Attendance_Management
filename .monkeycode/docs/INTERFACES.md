@@ -123,6 +123,7 @@
 | earlyMinutes | 早退分钟 |
 | overtimeHours | 加班小时 |
 | travelHours | 出差小时 |
+| workHours | 实际工作时长 (v2.0 新增，由 signIn/signOut 计算，精确到0.01小时) |
 | leaveType | 请假类型 |
 | isRestDay | 是否排班休息日 (仅由排班表+假期决定) |
 | absent | 是否旷工 |
@@ -218,10 +219,30 @@ Auth.requireAuth()       // 页面守卫 (未登录跳转)
 ## Matcher API
 
 ```js
-Matcher.buildEmployeeMap()           // 从打卡记录构建 { 考勤号 → {name, dept} }
+Matcher.buildEmployeeMap()           // 从打卡记录构建 { 考勤号 -> {name, dept} }
 Matcher.syncEmployees()              // 同步到 employees 表
-Matcher.resolveEmployeeNo(name, dept) // 姓名+部门 → 考勤号
-Matcher.matchOAToPunch(records, type) // OA 记录 → 考勤号匹配
+Matcher.resolveEmployeeNo(name, dept) // 姓名+部门 -> 考勤号
+Matcher.matchOAToPunch(records, type) // OA 记录 -> 考勤号匹配
+```
+
+## AppLayout API (v2.0 新增)
+
+```js
+AppLayout.init()         // 初始化侧边栏导航（4个导航项：导入/考勤/导出/设置）+ 问候语
+AppLayout.toggleMenu()   // 移动端侧边栏开关
+AppLayout.closeMenu()    // 关闭移动端侧边栏
+```
+
+导航项通过 `_detectPage()` 自动高亮当前页面。问候语通过 `_updateGreeting()` 按时间段生成（上午好/下午好/晚上好）。
+
+## 兼容桥接层 API (v2.0 新增)
+
+`shared/init.js` 提供向后兼容的模块映射：
+
+```js
+window.AttendanceDB      // Proxy 代理，映射 punches->punch_records, leaves->leave_records
+window.AttendanceRules   // 适配旧的 get()/save() API 到新的 settings 表
+window.AttendanceMatcher // 提供简化的规则 match() 方法
 ```
 
 ## RulesEngine API

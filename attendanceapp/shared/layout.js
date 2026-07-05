@@ -1,4 +1,4 @@
-// shared/layout.js — 全局侧边栏导航框架
+// shared/layout.js — macOS Big Sur 风格侧边栏导航
 
 const AppLayout = {
   menuOpen: false,
@@ -7,11 +7,28 @@ const AppLayout = {
     { id: 'import',    label: '数据导入',   href: 'import.html',             icon: 'upload' },
     { id: 'attendance',label: '考勤计算',   href: 'attendance.html',         icon: 'clock' },
     { id: 'export',    label: '导出中心',   href: 'export.html',             icon: 'download' },
-    { id: 'attendance-settings', label: '考勤规则', href: 'attendance-settings.html', icon: 'settings' },
-    { id: 'settings',  label: '系统设置',   href: 'settings.html',           icon: 'shield' },
+    { id: 'settings',  label: '系统设置',   href: 'settings.html',           icon: 'settings' },
   ],
 
+  lucideIcons: {
+    upload: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+    clock: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+    download: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+    settings: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
+    shield: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.06 1.06 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M9 12l2 2 4-4"/></svg>`,
+  },
+
+  logoutIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+
+  hamburgerIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`,
+
+  logoIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+
   init() {
+    if (!Auth.isLoggedIn()) {
+      window.location.href = 'index.html';
+      return;
+    }
     const page = this._detectPage();
     const nav = document.getElementById('sidebar-nav');
     if (!nav) return;
@@ -20,14 +37,10 @@ const AppLayout = {
       const isActive = page === item.id;
       const a = document.createElement('a');
       a.href = item.href;
-      a.className = `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
-        isActive
-          ? 'bg-purple-100 text-purple-700 border-l-3 border-purple-600'
-          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-      }`;
+      a.className = 'nav-item' + (isActive ? ' active' : '');
       a.innerHTML = `
-        <span class="w-5 h-5 flex-shrink-0">${this._icon(item.icon, isActive)}</span>
-        <span>${item.label}</span>
+        <div class="nav-icon">${this.lucideIcons[item.icon]}</div>
+        <span class="nav-label">${item.label}</span>
       `;
       nav.appendChild(a);
     });
@@ -39,20 +52,15 @@ const AppLayout = {
     this.menuOpen = !this.menuOpen;
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebar-overlay');
-    if (sidebar) {
-      sidebar.classList.toggle('-translate-x-full', !this.menuOpen);
-      sidebar.classList.toggle('translate-x-0', this.menuOpen);
-    }
-    if (overlay) {
-      overlay.classList.toggle('hidden', !this.menuOpen);
-    }
+    if (sidebar) sidebar.classList.toggle('open', this.menuOpen);
+    if (overlay) overlay.classList.toggle('hidden', !this.menuOpen);
   },
 
   closeMenu() {
     this.menuOpen = false;
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebar-overlay');
-    if (sidebar) sidebar.classList.add('-translate-x-full');
+    if (sidebar) sidebar.classList.remove('open');
     if (overlay) overlay.classList.add('hidden');
   },
 
@@ -70,23 +78,11 @@ const AppLayout = {
     const el = document.getElementById('header-greeting');
     if (!el) return;
     const hour = new Date().getHours();
-    let greeting = '上午好';
-    if (hour >= 12 && hour < 18) greeting = '下午好';
-    if (hour >= 18) greeting = '晚上好';
+    let g = '上午好';
+    if (hour >= 12 && hour < 18) g = '下午好';
+    if (hour >= 18) g = '晚上好';
     const user = localStorage.getItem('attendance_user') || '管理员';
-    el.textContent = `${greeting}，${user}`;
-  },
-
-  _icon(name, active) {
-    const color = active ? '#7C3AED' : '#64748B';
-    const icons = {
-      upload:   `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
-      clock:    `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-      download: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
-      settings: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
-      shield:   `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
-    };
-    return icons[name] || icons.settings;
+    el.textContent = g + '，' + user;
   }
 };
 

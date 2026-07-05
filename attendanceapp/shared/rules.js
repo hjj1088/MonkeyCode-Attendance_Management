@@ -243,6 +243,13 @@ const RulesEngine = {
           status = 'abnormal';
         }
 
+        let workHours = 0;
+        if (firstSignIn && lastSignOut) {
+          const [ish, ism] = firstSignIn.split(':').map(Number);
+          const [osh, osm] = lastSignOut.split(':').map(Number);
+          workHours = Math.round(((osh * 60 + osm) - (ish * 60 + ism)) / 60 * 100) / 100;
+        }
+
         results.push({
           employeeNo,
           name: employeeName,
@@ -258,6 +265,7 @@ const RulesEngine = {
           overtimeHours: adjustedOvertime,
           travelHours,
           leaveHours,
+          workHours,
           absent,
           status,
           leaveType,
