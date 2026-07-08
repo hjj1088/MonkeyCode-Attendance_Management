@@ -243,11 +243,12 @@ const Excel = {
         };
 
       case 'overtime':
+        const otRange = clean['加班起止时间'] || '';
         const otHours = clean['小时'] || '';
         return {
           applicant: clean['申请人'] || '',
           department: clean['申请部门'] || '',
-          startTime: '',
+          startTime: typeof otRange === 'number' ? (otRange > 1 ? this._formatDate(otRange) : this._formatTime(otRange)) : String(otRange).trim(),
           endTime: '',
           overtimeHours: parseFloat(otHours) || 0,
           content: clean['加班内容'] || ''
@@ -337,11 +338,16 @@ const Excel = {
     URL.revokeObjectURL(url);
   },
 
-   exportToExcel(records, template, filename) {
+   async exportToExcel(records, template, filename) {
+    const config = await Store.getByKey('settings', 'attendance_config') || {};
+    const startTime = config.workStartTime || '';
+    const endTime = config.workEndTime || '';
     return Excel._apiExport('/api/export/flat', {
       records: records,
       template: template,
-      filename: filename || 'attendance_export.xlsx'
+      filename: filename || 'attendance_export.xlsx',
+      startTime: startTime,
+      endTime: endTime
     }, filename || 'attendance_export.xlsx');
   },
 
@@ -359,12 +365,18 @@ const Excel = {
     const allHolidays = await Store.getAll('holidays');
     const holidaysForMonth = allHolidays.filter(h => h.date && h.date.startsWith(targetMonth));
 
+    const config = await Store.getByKey('settings', 'attendance_config') || {};
+    const startTime = config.workStartTime || '';
+    const endTime = config.workEndTime || '';
+
     return Excel._apiExport('/api/export/calendar', {
       targetMonth: targetMonth,
       fields: fields || [],
       results: results,
       schedules: scheduleForMonth,
-      holidays: holidaysForMonth
+      holidays: holidaysForMonth,
+      startTime: startTime,
+      endTime: endTime
     }, '考勤明细_' + targetMonth + '.xlsx');
   }
 };

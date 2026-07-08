@@ -11,6 +11,7 @@ import re
 import urllib.parse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.formatting.rule import FormulaRule
 from openpyxl.utils import get_column_letter
 
 
@@ -36,13 +37,13 @@ def _get_cell_style(val):
     sv = str(val)
     if re.search(r'请假|出差|加班|补卡', sv):
         font = BLUE_FONT
-    elif re.search(r'迟|早|上班未打卡|下班未打卡', sv):
+    elif re.search(r'迟|早|上班未打卡|下班未打卡|缺勤', sv):
         font = RED_FONT
     
     return font, fill
 
 
-def build_calendar_report(target_month, fields, results, schedules, holidays=None):
+def build_calendar_report(target_month, fields, results, schedules, holidays=None, startTime=None, endTime=None):
     """构建日历报表 XLSX"""
     y, m = map(int, target_month.split('-'))
     
@@ -51,6 +52,9 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
     
     field_set = set(f['field'] for f in fields) if fields else set()
     use_field = lambda name: not fields or name in field_set
+    
+    def _is_time_val(v):
+        return bool(v and re.match(r'^\d{1,2}:\d{2}$', str(v)))
     
     def build_am_cell(r):
         if not r: return ''
@@ -67,14 +71,11 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
         if r.get('status') == 'absent' or r.get('absent'): return '缺勤'
         if r.get('status') == 'no_sign_in': return '上班未打卡'
         if r.get('status') in ('overtime', 'suspect_ot'):
-            parts = ['加班']
+            parts = ['疑似加班']
             if use_field('overtimeHours') and r.get('overtimeHours'): parts.append(str(r['overtimeHours']) + 'h')
             return '/'.join(parts)
         if use_field('signIn') and r.get('signIn'):
-            val = r['signIn']
-            if use_field('lateMinutes') and r.get('lateMinutes', 0) > 0:
-                val += ' 迟' + str(r['lateMinutes']) + 'min'
-            return val
+            return r['signIn']
         return ''
     
     def build_pm_cell(r):
@@ -83,10 +84,7 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
         if r.get('absent'): return ''
         if r.get('status') == 'no_sign_out': return '下班未打卡'
         if use_field('signOut') and r.get('signOut'):
-            val = r['signOut']
-            if use_field('earlyMinutes') and r.get('earlyMinutes', 0) > 0:
-                val += ' 早' + str(r['earlyMinutes']) + 'min'
-            return val
+            return r['signOut']
         return ''
     
     # Group employees by department
@@ -229,6 +227,27 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
         
         current_row += 2
     
+    # Apply conditional formatting for late/early
+    if startTime and endTime:
+        data_end_row = current_row - 1
+        data_end_col = dept_start - 1
+        if data_end_col >= 4:
+            data_range = f'D3:{get_column_letter(data_end_col)}{data_end_row}'
+            sh, sm = startTime.split(':')
+            eh, em = endTime.split(':')
+            
+            late_rule = FormulaRule(
+                formula=[f'AND(MOD(ROW(),2)=1,ROW()>=3,ISTEXT(D3),NOT(ISERROR(TIMEVALUE(D3))),TIMEVALUE(D3)>TIME({int(sh)},{int(sm)},0))'],
+                font=RED_FONT
+            )
+            ws.conditional_formatting.add(data_range, late_rule)
+            
+            early_rule = FormulaRule(
+                formula=[f'AND(MOD(ROW(),2)=0,ROW()>=4,ISTEXT(D3),NOT(ISERROR(TIMEVALUE(D3))),TIMEVALUE(D3)<TIME({int(eh)},{int(em)},0))'],
+                font=RED_FONT
+            )
+            ws.conditional_formatting.add(data_range, early_rule)
+    
     # Adjust column widths
     for col_idx in range(1, ws.max_column + 1):
         col_letter = get_column_letter(col_idx)
@@ -245,7 +264,7 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
     return wb
 
 
-def build_flat_report(records, template, filename):
+def build_flat_report(records, template, filename, startTime=None, endTime=None):
     """构建平铺报表 XLSX"""
     wb = Workbook()
     ws = wb.active
@@ -256,7 +275,7 @@ def build_flat_report(records, template, filename):
     status_labels = {
         'normal': '正常', 'rest': '休息', 'abnormal': '迟到',
         'leave': '请假', 'travel': '出差', 'absent': '缺勤',
-        'overtime': '加班', 'suspect_ot': '疑似加班',
+        'overtime': '疑似加班', 'suspect_ot': '疑似加班',
         'no_sign_in': '上班未打卡', 'no_sign_out': '下班未打卡',
     }
     
@@ -288,6 +307,28 @@ def build_flat_report(records, template, filename):
             font, fill = _get_cell_style(val_str)
             if font: cell.font = font
             if fill: cell.fill = fill
+    
+    # Apply conditional formatting for late/early in signIn/signOut columns
+    if startTime and endTime:
+        data_end_row = len(records) + 1
+        for ci, f in enumerate(template['fields']):
+            col_letter = get_column_letter(ci + 1)
+            col_range = f'{col_letter}2:{col_letter}{data_end_row}'
+            sh, sm = startTime.split(':')
+            eh, em = endTime.split(':')
+            
+            if f['field'] == 'signIn':
+                late_rule = FormulaRule(
+                    formula=[f'AND(ISTEXT({col_letter}2),NOT(ISERROR(TIMEVALUE({col_letter}2))),TIMEVALUE({col_letter}2)>TIME({int(sh)},{int(sm)},0))'],
+                    font=RED_FONT
+                )
+                ws.conditional_formatting.add(col_range, late_rule)
+            elif f['field'] == 'signOut':
+                early_rule = FormulaRule(
+                    formula=[f'AND(ISTEXT({col_letter}2),NOT(ISERROR(TIMEVALUE({col_letter}2))),TIMEVALUE({col_letter}2)<TIME({int(eh)},{int(em)},0))'],
+                    font=RED_FONT
+                )
+                ws.conditional_formatting.add(col_range, early_rule)
     
     # Adjust column widths
     for col_idx in range(1, ws.max_column + 1):
@@ -329,8 +370,10 @@ class ExportHandler(http.server.SimpleHTTPRequestHandler):
             records = data.get('records', [])
             template = data.get('template', {'fields': []})
             filename = data.get('filename', 'attendance_export.xlsx')
+            startTime = data.get('startTime', '')
+            endTime = data.get('endTime', '')
             
-            wb = build_flat_report(records, template, filename)
+            wb = build_flat_report(records, template, filename, startTime, endTime)
             
             output = io.BytesIO()
             wb.save(output)
@@ -358,8 +401,10 @@ class ExportHandler(http.server.SimpleHTTPRequestHandler):
             results = data.get('results', [])
             schedules = data.get('schedules', [])
             holidays = data.get('holidays', [])
+            startTime = data.get('startTime', '')
+            endTime = data.get('endTime', '')
             
-            wb = build_calendar_report(target_month, fields, results, schedules, holidays)
+            wb = build_calendar_report(target_month, fields, results, schedules, holidays, startTime, endTime)
             
             output = io.BytesIO()
             wb.save(output)

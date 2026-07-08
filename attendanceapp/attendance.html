@@ -110,7 +110,7 @@
               <option value="leave">请假</option>
               <option value="travel">出差</option>
               <option value="absent">缺勤</option>
-              <option value="overtime">加班</option>
+              <option value="overtime">疑似加班</option>
               <option value="suspect_ot">疑似加班</option>
             </select>
             <input v-model="searchName" type="text" placeholder="搜索姓名" style="width:120px">
@@ -293,7 +293,7 @@ createApp({
   },
   methods: {
     statusLabel(s) {
-      const m = { normal:'正常', rest:'休息', abnormal:'迟到', leave:'请假', travel:'出差', absent:'缺勤', overtime:'加班', suspect_ot:'疑似加班', no_sign_in:'上班未打卡', no_sign_out:'下班未打卡' };
+      const m = { normal:'正常', rest:'休息', abnormal:'迟到', leave:'请假', travel:'出差', absent:'缺勤', overtime:'疑似加班', suspect_ot:'疑似加班', no_sign_in:'上班未打卡', no_sign_out:'下班未打卡' };
       return m[s] || s;
     },
     statusBadgeClass(s) {
@@ -310,7 +310,7 @@ createApp({
       else if (r.sourceLeaveIds && r.sourceLeaveIds.length) p.push('请假');
       if (r.travelHours > 0 || (r.sourceTravelIds && r.sourceTravelIds.length)) p.push('出差');
       if (r.overtimeHours > 0 && r.status !== 'leave' && r.status !== 'travel') p.push('加班' + r.overtimeHours + 'h');
-      else if (r.status === 'overtime') p.push('加班' + (r.overtimeHours || '') + 'h');
+      else if (r.status === 'overtime') p.push('疑似加班' + (r.overtimeHours ? r.overtimeHours + 'h' : ''));
       else if (r.sourceOvertimeIds && r.sourceOvertimeIds.length) p.push('有加班');
       if (r.status === 'suspect_ot') p.push('疑似加班');
       if (r.sourceMissIds && r.sourceMissIds.length) p.push('补卡');
