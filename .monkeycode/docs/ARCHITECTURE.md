@@ -18,7 +18,7 @@ v2.0 进行了 macOS Big Sur 风格重设计，引入统一的 `bigsur.css` 设�
 | Excel 导出 | Python openpyxl | 3.1.5 (pip) | XLSX 生成，支持单元格样式（字体颜色、填充色） |
 | 后端服务 | Python http.server | 标准库 | HTTP API + 静态文件服务，单进程 |
 | 认证 | localStorage | 浏览器原生 | 简单的用户名/密码认证 |
-| 部署 | Python 单进程 | 标准库 | `export_server.py` 同时提供静态文件与 API 端点 |
+| 部署 | Python 单进程 / Docker | 标准库 / Dockerfile + GitHub Actions CI/CD | `export_server.py` 同时提供静态文件与 API 端点 |
 
 前端依赖全部本地化（`shared/` 目录），无需 npm/pnpm 构建步骤，无 CDN 依赖。Python 依赖 `openpyxl` 需通过 `pip install openpyxl` 安装。
 
@@ -129,8 +129,8 @@ export_server.py (独立进程，HTTP API + 静态文件)
 
 3. **导出阶段** (`export.html`)：
    - 用户编辑导出模板字段（19个可选字段，含工作时长）
-   - Flat 模式：前端准备 records + template -> POST `/api/export/flat` -> Python openpyxl 生成 XLSX
-   - 月报模式：前端读取 results + schedules + holidays -> POST `/api/export/calendar` -> Python 生成日历格式 XLSX（按部门分组、上午/下午双行、异常着色）
+   - Flat 模式：前端准备 records + template -> POST `/api/export/flat` -> Python openpyxl 生成 XLSX（含条件格式迟到/早退红色标记）
+   - 月报模式：前端读取 results + schedules + holidays -> POST `/api/export/calendar` -> Python 生成日历格式 XLSX（按部门分组、上午/下午双行、直接样式+逐列独立 FormulaRule 双重条件格式着色）
 
 ## 页面导航
 
@@ -160,6 +160,23 @@ v2.0 使用自定义 `shared/bigsur.css` 替代 Tailwind CDN，定义了中国�
 | 檀木棕 | `--sandal` | #8B5E3C | 早退/出差状态 |
 
 核心组件类：`.card`、`.btn-primary`（朱砂红）、`.btn-secondary`、`.badge-*`（6种状态）、`.tabs`、`.form-input`。侧边栏和登录卡片使用毛玻璃效果（`backdrop-filter: blur()`）。
+
+## 部署方式
+
+### Python 单进程
+
+```bash
+pip install openpyxl
+PORT=8001 python3 attendanceapp/export_server.py
+```
+
+### Docker 容器
+
+```bash
+docker run -d -p 8000:8000 ghcr.io/hjj1088/monkeycode-attendance_management:latest
+```
+
+GitHub Actions 自动构建：推送代码到 `main` 分支后自动构建镜像并发布到 GitHub Container Registry（`.github/workflows/docker-publish.yml`）。
 
 ## 9 种考勤状态
 
@@ -197,8 +214,11 @@ v2.0 新增 `shared/init.js` 兼容桥接层，为旧版 API 提供映射：
 | CDN 依赖 | Tailwind CSS CDN | 无（全部本地化） |
 | 导出 | 浏览器端 SheetJS | Python openpyxl（带样式） |
 | 设计风格 | 通用工具类 | macOS Big Sur 毛玻璃 + 中国风色彩 |
+| 部署 | 纯手动启动 | 支持 Docker 容器化 + GitHub Actions CI/CD |
 | 页面布局 | 单栏 `max-w-7xl` | 侧边栏 + 主内容区 `app-shell` |
 | 登录页 | 顶部导航式 | 居中毛玻璃卡片 |
+| 导出条件格式 | 无 | 逐列独立 FormulaRule（迟到>上班时间红字，早退<下班时间红字）+ 直接单元格样式双重保障 |
+| 加班追溯 | OA 加班记录无法按日期匹配 | 解析"加班起止时间"字段，startTime 正确填充 |
 
 ## 版本
 

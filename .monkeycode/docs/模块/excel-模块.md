@@ -40,8 +40,8 @@ Excel 文件的全生命周期处理：解析上传、类型识别、数据标�
 | 方法 | 类型 | 说明 |
 |------|------|------|
 | `_apiExport(endpoint, data, filename)` | `async` | 内部 fetch 封装，POST JSON 到 Python 后端，接收 XLSX blob 并触发浏览器下载 |
-| `exportToExcel(records, template, filename)` | `async` | Flat 格式导出，调用 `_apiExport` 发往 `/api/export/flat` |
-| `exportCalendarReport(targetMonth, fields)` | `async` | 日历月报格式导出。查询指定月考勤结果、排班、节假日后，通过 `_apiExport` 发往 `/api/export/calendar` |
+| `exportToExcel(records, template, filename)` | `async` | Flat 格式导出。从 `settings.attendance_config` 读取 `workStartTime`/`workEndTime` 并通过 API 传参，后端据此生成迟到/早退条件格式规则 |
+| `exportCalendarReport(targetMonth, fields)` | `async` | 日历月报格式导出。同上读取作息时间并传参到 `/api/export/calendar` |
 
 ## 排班表解析细节
 
@@ -102,5 +102,14 @@ Excel 文件的全生命周期处理：解析上传、类型识别、数据标�
 2. 从 IndexedDB 查询指定月的 `attendance_results`，无结果时抛错
 3. 从 IndexedDB 查询对应年份的 `schedules`，筛选当月排班
 4. 从 IndexedDB 查询全部 `holidays`，筛选当月节假日
-5. 将 `{ targetMonth, fields, results, schedules, holidays }` 发往 `/api/export/calendar`
-6. 后端生成日历月报 XLSX（部门分组、双行表头、单元格着色等样式由 Python openpyxl 完成）
+5. 从 `settings.attendance_config` 读取 `workStartTime`/`workEndTime`
+6. 将 `{ targetMonth, fields, results, schedules, holidays, startTime, endTime }` 发往 `/api/export/calendar`
+7. 后端生成日历月报 XLSX（部门分组、双行表头、单元格着色 + 条件格式规则等样式由 Python openpyxl 完成）
+
+## 加班记录导入修复
+
+v2.0.2 修复了 `overtime` 类型记录的 `startTime` 字段长期为空导致的追溯缺失：
+
+- **原问题**：`_normalizeRecord` 中 `case 'overtime'` 始终设置 `startTime: ''`，导致 `calculateMonth` 的 `(o.startTime || '').substring(0, 10)` 无法提取日期匹配
+- **修复**：解析 `加班起止时间` 字段的原始值存入 `startTime`：Excel 数值（>1）通过 `_formatDate` 转 `YYYY-MM-DD`；字符串原样保留
+- **影响**：加班 OA 记录现在可正确匹配到对应日期的考勤结果，详情弹窗中的加班追溯恢复正常

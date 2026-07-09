@@ -61,10 +61,12 @@
 | 字段 | 说明 |
 |------|------|
 | applicant | 申请人姓名 |
-| startTime | 开始时间 |
+| startTime | 加班起止时间原始值（Excel 数值转 YYYY-MM-DD 或文本原样存储，用于日期匹配追溯） |
 | endTime | 结束时间 |
 | overtimeHours | 加班小时数 |
 | content | 加班内容 |
+
+> **v2.0.2 修复**：`startTime` 原为空字符串导致 `calculateMonth` 无法按日期匹配加班 OA。现已改为解析 `加班起止时间` Excel 字段，支持数值和文本两种格式。
 
 #### travel_records - 出差记录
 ```js
@@ -259,6 +261,8 @@ RulesEngine.getResultDetail(eno, date)   // 获取某天详情 (含关联源记�
 
 | 端点 | 方法 | 请求体 | 响应 |
 |------|------|--------|------|
-| `/api/export/flat` | POST | `{records: array, template: {fields: [{label, field}]}, filename: string}` | 二进制 XLSX, `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
-| `/api/export/calendar` | POST | `{targetMonth: "YYYY-MM", fields: array, results: array, schedules: array, holidays: array}` | 二进制 XLSX |
-| `/*` | OPTIONS | — | 204, `Access-Control-Allow-Origin: *` (CORS 预检)
+| `/api/export/flat` | POST | `{records: array, template: {fields: [{label, field}]}, filename: string, startTime: string, endTime: string}` | 二进制 XLSX |
+| `/api/export/calendar` | POST | `{targetMonth: "YYYY-MM", fields: array, results: array, schedules: array, holidays: array, startTime: string, endTime: string}` | 二进制 XLSX |
+| `/*` | OPTIONS | — | 204, `Access-Control-Allow-Origin: *` (CORS 预检) |
+
+> `startTime`/`endTime` 为选填参数，格式 `HH:MM`（如 `08:30`/`17:30`）。传入后用于生成迟到/早退条件格式规则；未传入时自动从排班数据或打卡记录中提取，兜底默认值为 `08:30`/`17:30`。

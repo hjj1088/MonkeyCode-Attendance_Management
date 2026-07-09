@@ -14,6 +14,20 @@ python3 /workspace/attendanceapp/export_server.py
 
 访问 `http://localhost:8000` 即可。服务默认监听 8000 端口，可通过 `PORT` 环境变量修改（如 `PORT=8001 python3 export_server.py`）。
 
+## Docker 部署
+
+项目支持容器化部署，通过 GitHub Actions 自动构建镜像并发布到 GitHub Container Registry：
+
+```bash
+# 拉取并运行
+docker run -d -p 8000:8000 ghcr.io/hjj1088/monkeycode-attendance_management:latest
+
+# 本地构建
+cd attendanceapp && docker build -t attendanceapp:latest .
+```
+
+CI/CD 配置位于 `.github/workflows/docker-publish.yml`，代码推送到 `main` 分支后自动触发。
+
 ## 项目结构约定
 
 - **shared/ 目录**：所有 HTML 页面共享的业务逻辑模块和本地化第三方库
@@ -90,3 +104,5 @@ DB.version(2).stores({
 6. **SheetJS 社区版限制**：不支持单元格样式写入，导出样式由 Python openpyxl 实现
 7. **登录账号**：仅支持内置 admin/admin123 单一账号
 8. **跨页功能**：v2.0 的 bigsur.css 和 layout.js 与 v1.0 (attendance/) 页面不兼容，两套代码独立部署
+9. **Docker 镜像**：构建于 `python:3.12-slim` 基础镜像，仅支持 amd64 架构，无 arm64 支持
+10. **条件格式兼容性**：迟到/早退条件格式依赖 Excel 原生公式（`TIMEVALUE`/`MOD(ROW())`），部分非 Microsoft 软件（如 WPS 旧版）可能不完全支持
