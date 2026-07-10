@@ -18,6 +18,7 @@ from openpyxl.utils import get_column_letter
 RED_FONT = Font(color='FFFF0000')
 BLUE_FONT = Font(color='FF0066CC')
 GRAY_FILL = PatternFill(start_color='FFD9D9D9', end_color='FFD9D9D9', fill_type='solid')
+TEXT_FMT = '@'
 THIN_BORDER = Border(
     left=Side(style='thin'),
     right=Side(style='thin'),
@@ -35,12 +36,24 @@ def _get_cell_style(val):
         return font, fill
     
     sv = str(val)
-    if re.search(r'请假|出差|加班|补卡', sv):
+    if re.search(r'假|休|出差|加班|补卡', sv):
         font = BLUE_FONT
     elif re.search(r'迟|早|上班未打卡|下班未打卡|缺勤', sv):
         font = RED_FONT
     
     return font, fill
+
+
+def _is_time_val(v):
+    return bool(v and re.match(r'^\d{1,2}:\d{2}$', str(v)))
+
+
+def _time_to_minutes(t):
+    """将 HH:MM 或 H:MM 字符串转换为分钟数，无效返回 None"""
+    if not t or not _is_time_val(str(t)):
+        return None
+    parts = str(t).split(':')
+    return int(parts[0]) * 60 + int(parts[1])
 
 
 def build_calendar_report(target_month, fields, results, schedules, holidays=None, startTime=None, endTime=None):
@@ -53,27 +66,20 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
     field_set = set(f['field'] for f in fields) if fields else set()
     use_field = lambda name: not fields or name in field_set
     
-    def _is_time_val(v):
-        return bool(v and re.match(r'^\d{1,2}:\d{2}$', str(v)))
-    
     def build_am_cell(r):
         if not r: return ''
         if r.get('status') == 'rest': return ''
         if r.get('status') == 'leave':
-            parts = ['请假']
+            parts = []
             if use_field('leaveType') and r.get('leaveType'): parts.append(r['leaveType'])
             if use_field('leaveHours') and r.get('leaveHours') is not None: parts.append(str(r['leaveHours']) + 'h')
-            return '/'.join(parts)
+            return '/'.join(parts) if parts else '请假'
         if r.get('status') == 'travel':
             parts = ['出差']
             if use_field('travelHours') and r.get('travelHours'): parts.append(str(r['travelHours']) + 'h')
             return '/'.join(parts)
         if r.get('status') == 'absent' or r.get('absent'): return '缺勤'
         if r.get('status') == 'no_sign_in': return '上班未打卡'
-        if r.get('status') in ('overtime', 'suspect_ot'):
-            parts = ['疑似加班']
-            if use_field('overtimeHours') and r.get('overtimeHours'): parts.append(str(r['overtimeHours']) + 'h')
-            return '/'.join(parts)
         if use_field('signIn') and r.get('signIn'):
             return r['signIn']
         return ''
@@ -157,6 +163,16 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
             if h.get('date'):
                 holiday_map[h['date']] = h
     
+    schedule_by_date = {}
+    for sched in schedules:
+        work_days = sched.get('workDays', {})
+        ws_time = sched.get('workStartTime', '')
+        we_time = sched.get('workEndTime', '')
+        for day_key, is_work in work_days.items():
+            if is_work and ws_time:
+                date_key = f'{target_month}-{str(int(day_key)).zfill(2)}'
+                schedule_by_date[date_key] = {'workStartTime': ws_time, 'workEndTime': we_time}
+    
     for d in range(1, last_day + 1):
         date_str = f'{target_month}-{str(d).zfill(2)}'
         day_num = str(d).zfill(2)
@@ -191,13 +207,21 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
                 am_val = build_am_cell(r)
                 cell = ws.cell(row=row_am, column=col, value=am_val)
                 cell.border = THIN_BORDER
+                cell.number_format = TEXT_FMT
                 
+                font, fill = _get_cell_style(am_val)
+                if font: cell.font = font
+                if fill: cell.fill = fill
                 if is_rest:
                     cell.fill = GRAY_FILL
                 else:
-                    font, fill = _get_cell_style(am_val)
-                    if font: cell.font = font
-                    if fill: cell.fill = fill
+                    sched_info = schedule_by_date.get(date_str)
+                    if am_val and _is_time_val(am_val) and sched_info:
+                        sst = sched_info.get('workStartTime', '')
+                        ami = _time_to_minutes(am_val)
+                        sti = _time_to_minutes(sst)
+                        if ami is not None and sti is not None and ami > sti:
+                            cell.font = RED_FONT
                 col += 1
         
         # PM row
@@ -216,37 +240,66 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
                 pm_val = build_pm_cell(r)
                 cell = ws.cell(row=row_pm, column=col, value=pm_val)
                 cell.border = THIN_BORDER
+                cell.number_format = TEXT_FMT
                 
+                font, fill = _get_cell_style(pm_val)
+                if font: cell.font = font
+                if fill: cell.fill = fill
                 if is_rest:
                     cell.fill = GRAY_FILL
                 else:
-                    font, fill = _get_cell_style(pm_val)
-                    if font: cell.font = font
-                    if fill: cell.fill = fill
+                    sched_info = schedule_by_date.get(date_str)
+                    if pm_val and _is_time_val(pm_val) and sched_info:
+                        set_ = sched_info.get('workEndTime', '')
+                        pmi = _time_to_minutes(pm_val)
+                        edi = _time_to_minutes(set_)
+                        if pmi is not None and edi is not None and pmi < edi:
+                            cell.font = RED_FONT
                 col += 1
         
         current_row += 2
     
-    # Apply conditional formatting for late/early
-    if startTime and endTime:
+    # Apply conditional formatting rules for late/early (visible in Excel)
+    _st = startTime
+    _et = endTime
+    if not _st or not _et:
+        for sched in schedules:
+            ws_time = sched.get('workStartTime', '')
+            we_time = sched.get('workEndTime', '')
+            if ws_time and not _st:
+                _st = ws_time
+            if we_time and not _et:
+                _et = we_time
+            if _st and _et:
+                break
+        # Fallback defaults
+        if not _st or not _is_time_val(_st):
+            _st = '08:30'
+        if not _et or not _is_time_val(_et):
+            _et = '17:30'
+    
+    if _st and _et and _is_time_val(_st) and _is_time_val(_et) and current_row > 3:
         data_end_row = current_row - 1
         data_end_col = dept_start - 1
         if data_end_col >= 4:
             data_range = f'D3:{get_column_letter(data_end_col)}{data_end_row}'
-            sh, sm = startTime.split(':')
-            eh, em = endTime.split(':')
+            print(f'[DEBUG] Calendar CF APPLIED range={data_range} _st={_st} _et={_et} rows={current_row-1}', flush=True)
+            sh, sm = _st.split(':')
+            eh, em = _et.split(':')
             
             late_rule = FormulaRule(
-                formula=[f'AND(MOD(ROW(),2)=1,ROW()>=3,ISTEXT(D3),NOT(ISERROR(TIMEVALUE(D3))),TIMEVALUE(D3)>TIME({int(sh)},{int(sm)},0))'],
+                formula=[f'AND(MOD(ROW(),2)=1,ROW()>=3,D3<>"",NOT(ISERROR(TIMEVALUE(D3))),TIMEVALUE(D3)>TIME({int(sh)},{int(sm)},0))'],
                 font=RED_FONT
             )
             ws.conditional_formatting.add(data_range, late_rule)
             
             early_rule = FormulaRule(
-                formula=[f'AND(MOD(ROW(),2)=0,ROW()>=4,ISTEXT(D3),NOT(ISERROR(TIMEVALUE(D3))),TIMEVALUE(D3)<TIME({int(eh)},{int(em)},0))'],
+                formula=[f'AND(MOD(ROW(),2)=0,ROW()>=4,D3<>"",NOT(ISERROR(TIMEVALUE(D3))),TIMEVALUE(D3)<TIME({int(eh)},{int(em)},0))'],
                 font=RED_FONT
             )
             ws.conditional_formatting.add(data_range, early_rule)
+    else:
+        print(f'[DEBUG] Calendar CF SKIPPED _st={repr(_st)} _et={repr(_et)} current_row={current_row} dept_start={dept_start} results={len(results)} schedules={len(schedules)}', flush=True)
     
     # Adjust column widths
     for col_idx in range(1, ws.max_column + 1):
@@ -303,34 +356,70 @@ def build_flat_report(records, template, filename, startTime=None, endTime=None)
             val_str = str(val) if val is not None else ''
             cell = ws.cell(row=row_idx, column=col_idx, value=val_str)
             cell.border = THIN_BORDER
+            cell.number_format = TEXT_FMT
             
             font, fill = _get_cell_style(val_str)
             if font: cell.font = font
             if fill: cell.fill = fill
+            
+            sst = rec.get('scheduleStart', '') or startTime
+            sed = rec.get('scheduleEnd', '') or endTime
+            if field_name == 'signIn' and val and _is_time_val(str(val)) and _is_time_val(sst):
+                if _time_to_minutes(str(val)) > _time_to_minutes(sst):
+                    cell.font = RED_FONT
+            elif field_name == 'signOut' and val and _is_time_val(str(val)) and _is_time_val(sed):
+                if _time_to_minutes(str(val)) < _time_to_minutes(sed):
+                    cell.font = RED_FONT
     
-    # Apply conditional formatting for late/early in signIn/signOut columns
-    if startTime and endTime:
+    # Apply conditional formatting rules for late/early
+    _st = startTime
+    _et = endTime
+    if not _st or not _et:
+        for rec in records:
+            sst = rec.get('scheduleStart', '')
+            sed2 = rec.get('scheduleEnd', '')
+            if sst and not _st:
+                _st = sst
+            if sed2 and not _et:
+                _et = sed2
+            if _st and _et:
+                break
+        if not _st or not _is_time_val(_st):
+            _st = '08:30'
+        if not _et or not _is_time_val(_et):
+            _et = '17:30'
+    
+    sh = None; sm = None; eh = None; em = None
+    if _st and _et and _is_time_val(_st) and _is_time_val(_et):
+        sh, sm = _st.split(':')
+        eh, em = _et.split(':')
+    
+    if sh is not None:
         data_end_row = len(records) + 1
+        cf_count = 0
         for ci, f in enumerate(template['fields']):
             col_letter = get_column_letter(ci + 1)
             col_range = f'{col_letter}2:{col_letter}{data_end_row}'
-            sh, sm = startTime.split(':')
-            eh, em = endTime.split(':')
-            
-            if f['field'] == 'signIn':
+            cell_ref = f'{col_letter}2'
+            field = f.get('field', '')
+            flabel = f.get('label', '')
+            is_si = field == 'signIn' or ('签到' in flabel)
+            is_so = field == 'signOut' or ('签退' in flabel)
+            if is_si:
                 late_rule = FormulaRule(
-                    formula=[f'AND(ISTEXT({col_letter}2),NOT(ISERROR(TIMEVALUE({col_letter}2))),TIMEVALUE({col_letter}2)>TIME({int(sh)},{int(sm)},0))'],
+                    formula=[f'AND({cell_ref}<>"",NOT(ISERROR(TIMEVALUE({cell_ref}))),TIMEVALUE({cell_ref})>TIME({int(sh)},{int(sm)},0))'],
                     font=RED_FONT
                 )
                 ws.conditional_formatting.add(col_range, late_rule)
-            elif f['field'] == 'signOut':
+                cf_count += 1
+            elif is_so:
                 early_rule = FormulaRule(
-                    formula=[f'AND(ISTEXT({col_letter}2),NOT(ISERROR(TIMEVALUE({col_letter}2))),TIMEVALUE({col_letter}2)<TIME({int(eh)},{int(em)},0))'],
+                    formula=[f'AND({cell_ref}<>"",NOT(ISERROR(TIMEVALUE({cell_ref}))),TIMEVALUE({cell_ref})<TIME({int(eh)},{int(em)},0))'],
                     font=RED_FONT
                 )
                 ws.conditional_formatting.add(col_range, early_rule)
-    
-    # Adjust column widths
+                cf_count += 1
+        print(f'[DEBUG] Flat CF APPLIED _st={_st} _et={_et} records={len(records)} rules_added={cf_count}', flush=True)
     for col_idx in range(1, ws.max_column + 1):
         col_letter = get_column_letter(col_idx)
         max_width = len(headers[col_idx - 1]) * 2 + 4
