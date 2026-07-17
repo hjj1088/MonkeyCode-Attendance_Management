@@ -130,7 +130,7 @@ export_server.py (独立进程，HTTP API + 静态文件)
 3. **导出阶段** (`export.html`)：
    - 用户编辑导出模板字段（19个可选字段，含工作时长）
    - Flat 模式：前端准备 records + template -> POST `/api/export/flat` -> Python openpyxl 生成 XLSX（含条件格式迟到/早退红色标记）
-   - 月报模式：前端读取 results + schedules + holidays -> POST `/api/export/calendar` -> Python 生成日历格式 XLSX（按部门分组、上午/下午双行、直接样式+逐列独立 FormulaRule 双重条件格式着色）
+   - 月报模式：前端读取 results + schedules + holidays -> POST `/api/export/calendar` -> Python 生成日历格式 XLSX（按部门分组、上午/下午双行、直接样式+2条全局 FormulaRule 双重条件格式着色）
 
 ## 页面导航
 
@@ -174,9 +174,16 @@ PORT=8001 python3 attendanceapp/export_server.py
 
 ```bash
 docker run -d -p 8000:8000 ghcr.io/hjj1088/monkeycode-attendance_management:latest
+
+# 验证运行版本
+curl http://localhost:8000/health
+# {"status":"ok","version":"ed71a7b...","build_time":"2026-07-17T01:20:50Z",...}
+
+# 查看访问日志（含客户端 IP）
+docker logs <container_id>
 ```
 
-GitHub Actions 自动构建：推送代码到 `main` 分支后自动构建镜像并发布到 GitHub Container Registry（`.github/workflows/docker-publish.yml`）。
+GitHub Actions 自动构建：推送代码到 `main` 分支后自动构建镜像并发布到 GitHub Container Registry（`.github/workflows/docker-publish.yml`）。构建时注入 `GIT_SHA` 和 `BUILD_TIME` 到 `version.py`，启动横幅和 `/health` 端点可验证镜像版本。
 
 ## 9 种考勤状态
 
@@ -217,11 +224,11 @@ v2.0 新增 `shared/init.js` 兼容桥接层，为旧版 API 提供映射：
 | 部署 | 纯手动启动 | 支持 Docker 容器化 + GitHub Actions CI/CD |
 | 页面布局 | 单栏 `max-w-7xl` | 侧边栏 + 主内容区 `app-shell` |
 | 登录页 | 顶部导航式 | 居中毛玻璃卡片 |
-| 导出条件格式 | 无 | 逐列独立 FormulaRule（迟到>上班时间红字，早退<下班时间红字）+ 直接单元格样式双重保障 |
+| 导出条件格式 | 无 | 直接单元格样式 + 全局2条 FormulaRule（日历）/按列规则（平铺）双重保障 |
 | 加班追溯 | OA 加班记录无法按日期匹配 | 解析"加班起止时间"字段，startTime 正确填充 |
 
 ## 版本
 
-当前版本：**v2.0**（Big Sur 重设计）。原始稳定版 v1.0.28 保留于 `attendance/` 目录。
+当前版本：**v2.0.2**（Big Sur 重设计 + 条件格式修复 + Docker CI/CD + 日志/版本体系增强）。原始稳定版 v1.0.28 保留于 `attendance/` 目录。
 
 业务逻辑核心（`auth.js`、`db.js`、`matcher.js`）与 v1.0 完全一致，`rules.js` 新增了调休抵扣、`missPerson` 支持、`workHours` 计算和 `sourceOvertimeIds` 字段。

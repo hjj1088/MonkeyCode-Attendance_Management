@@ -1,6 +1,6 @@
 # export_server 模块
 
-**文件**：`attendance/export_server.py`
+**文件**：`attendanceapp/export_server.py`
 
 ## 职能
 
@@ -10,11 +10,34 @@ Python HTTP 服务，使用 openpyxl 生成带单元格样式的 XLSX 考勤报�
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| `GET` | `/health` | 健康检查，返回版本信息 JSON |
 | `POST` | `/api/export/flat` | Flat（列表）报表导出 |
 | `POST` | `/api/export/calendar` | Calendar（月报）报表导出 |
 | `OPTIONS` | `/*` | CORS 预检请求 |
 
 所有 API 响应均设置 `Access-Control-Allow-Origin: *`，允许跨域请求。
+
+### GET /health
+
+v2.0.3 新增。返回 JSON 格式的服务版本和运行状态信息，用于验证 Docker 镜像版本：
+
+```json
+{
+  "status": "ok",
+  "service": "attendance-export-server",
+  "version": "ed71a7b0c524219d77805adcf13a63022530da6e",
+  "build_time": "2026-07-17T01:20:50Z",
+  "python": "3.12.13",
+  "server_time": "2026-07-17T01:45:11.635068+00:00"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `version` | Git SHA，Docker 构建时注入 |
+| `build_time` | Docker 镜像构建时间（UTC） |
+| `python` | Python 运行时版本 |
+| `server_time` | 服务器当前时间（UTC） |
 
 ### POST /api/export/flat
 
@@ -225,20 +248,46 @@ CENTER_ALIGN = Alignment(horizontal='center', vertical='center')        # 居中
 ## 服务启动
 
 ```bash
-# 安装依赖
+# 本地开发
 pip install openpyxl
-
-# 启动服务（默认 8000 端口）
-python3 /workspace/attendance/export_server.py
+python3 /workspace/attendanceapp/export_server.py
 
 # 自定义端口
-PORT=8080 python3 /workspace/attendance/export_server.py
+PORT=8080 python3 /workspace/attendanceapp/export_server.py
+
+# Docker 部署
+docker run -d -p 38000:8000 ghcr.io/hjj1088/monkeycode-attendance_management:latest
+
+# 启动日志示例
+# ============================================================
+#  考勤导出服务器  Attendance Export Server
+# ============================================================
+#  Git SHA      : ed71a7b0c524219d77805adcf13a63022530da6e
+#  Build Time   : 2026-07-17T01:20:50Z
+#  Python       : 3.12.13
+#  Port         : 8000
+#  Health Check : http://0.0.0.0:8000/health
+#  Start Time   : 2026-07-17T01:45:11.635068+00:00
+# ============================================================
 ```
 
 `ExportHandler` 继承 `SimpleHTTPRequestHandler`，`directory` 参数指向 `export_server.py` 所在目录（即 `/workspace/attendanceapp/`），使得同一服务既能返回静态 HTML/JS 文件，也能处理 API 路由。
 
+启动时通过 `_startup_banner()` 打印版本信息横幅（含 Git SHA、构建时间、Python 版本、端口、health 地址），便于在 Docker logs 中识别运行版本。Git SHA 和构建时间在 Docker 镜像构建时通过 `--build-arg` 注入到 `version.py`。
+
+## 访问日志
+
+v2.0.3 恢复了 HTTP 请求日志输出。`log_message()` 使用标准 Apache 格式写入 `stderr`：
+
+```
+127.0.0.1 - - [17/Jul/2026 01:21:26] "GET /health HTTP/1.1" 200 -
+172.17.0.1 - - [17/Jul/2026 01:21:18] "GET /shared/dexie.min.js HTTP/1.1" 200 -
+```
+
+每条日志包含客户端 IP、请求时间戳、HTTP 方法、路径和响应状态码。Docker 容器的 `docker logs` 命令可直接查看。
+
 ## 错误处理
 
+- `ExportHandler.do_GET()` 处理 `/health` 路由，其余路径回退到父类 `SimpleHTTPRequestHandler.do_GET()` 返回静态文件
 - `ExportHandler.do_POST()` 仅匹配 `/api/export/flat` 和 `/api/export/calendar`，其余路径返回 404
 - 导出过程异常捕获后返回 500，错误信息写入响应体
-- 日志输出通过重写 `log_message()` 抑制（`pass`），保持控制台清洁

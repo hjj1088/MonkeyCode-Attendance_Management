@@ -261,8 +261,9 @@ RulesEngine.getResultDetail(eno, date)   // 获取某天详情 (含关联源记�
 
 | 端点 | 方法 | 请求体 | 响应 |
 |------|------|--------|------|
+| `/health` | GET | — | JSON `{status, version, build_time, python, server_time}` |
 | `/api/export/flat` | POST | `{records: array, template: {fields: [{label, field}]}, filename: string, startTime: string, endTime: string}` | 二进制 XLSX |
 | `/api/export/calendar` | POST | `{targetMonth: "YYYY-MM", fields: array, results: array, schedules: array, holidays: array, startTime: string, endTime: string}` | 二进制 XLSX |
 | `/*` | OPTIONS | — | 204, `Access-Control-Allow-Origin: *` (CORS 预检) |
 
-> `startTime`/`endTime` 为选填参数，格式 `HH:MM`（如 `08:30`/`17:30`）。传入后用于生成迟到/早退条件格式规则；未传入时自动从排班数据或打卡记录中提取，兜底默认值为 `08:30`/`17:30`。
+> `GET /health` 为 v2.0.3 新增端点，返回服务版本信息（Git SHA、构建时间、Python 版本）用于验证 Docker 镜像版本。`startTime`/`endTime` 为选填参数，格式 `HH:MM`（如 `08:30`/`17:30`）。传入后用于生成迟到/早退条件格式规则；未传入时自动从排班数据或打卡记录中提取，兜底默认值为 `08:30`/`17:30`。

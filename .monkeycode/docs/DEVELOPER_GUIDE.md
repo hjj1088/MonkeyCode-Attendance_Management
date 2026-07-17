@@ -22,11 +22,19 @@ python3 /workspace/attendanceapp/export_server.py
 # 拉取并运行
 docker run -d -p 8000:8000 ghcr.io/hjj1088/monkeycode-attendance_management:latest
 
+# 验证运行版本（确认是否为最新镜像）
+curl http://localhost:8000/health
+
+# 查看访问日志（含客户端 IP、请求路径、响应码）
+docker logs <container_id>
+
 # 本地构建
 cd attendanceapp && docker build -t attendanceapp:latest .
 ```
 
-CI/CD 配置位于 `.github/workflows/docker-publish.yml`，代码推送到 `main` 分支后自动触发。
+CI/CD 配置位于 `.github/workflows/docker-publish.yml`，代码推送到 `main` 分支后自动触发。构建时注入 Git 提交 SHA 和时间戳到 `version.py`，启动后在日志中打印版本横幅，可通过 `/health` 端点确认当前运行的镜像版本。
+
+Docker daemon 重启后若 curl 超时（TCP 握手成功但 HTTP 无响应），可能是 docker-proxy 进程卡死，执行 `systemctl restart docker && docker start <容器>` 即可修复。
 
 ## 项目结构约定
 
@@ -104,5 +112,5 @@ DB.version(2).stores({
 6. **SheetJS 社区版限制**：不支持单元格样式写入，导出样式由 Python openpyxl 实现
 7. **登录账号**：仅支持内置 admin/admin123 单一账号
 8. **跨页功能**：v2.0 的 bigsur.css 和 layout.js 与 v1.0 (attendance/) 页面不兼容，两套代码独立部署
-9. **Docker 镜像**：构建于 `python:3.12-slim` 基础镜像，仅支持 amd64 架构，无 arm64 支持
+9. **Docker 镜像**：构建于 `python:3.12-slim` 基础镜像，仅支持 amd64 架构，无 arm64 支持。旧版 Docker daemon 的 docker-proxy 偶发僵尸状态，需 `systemctl restart docker` 恢复
 10. **条件格式兼容性**：迟到/早退条件格式依赖 Excel 原生公式（`TIMEVALUE`/`MOD(ROW())`），部分非 Microsoft 软件（如 WPS 旧版）可能不完全支持
