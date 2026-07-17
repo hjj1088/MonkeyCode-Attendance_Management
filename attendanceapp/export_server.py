@@ -8,6 +8,7 @@ import json
 import io
 import os
 import re
+import sys
 import urllib.parse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -521,13 +522,14 @@ class ExportHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
     
-    def log_message(self, format, *args):
-        """抑制日志以保持输出清洁"""
-        pass
+    def log_message(self, fmt, *args):
+        sys.stderr.write(fmt % args + '\n')
+        sys.stderr.flush()
 
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8000))
     server = http.server.HTTPServer(('0.0.0.0', port), ExportHandler)
-    print(f'Server running on port {port}')
+    print(f'Server running on port {port}', flush=True)
+    sys.stdout.flush()
     server.serve_forever()
