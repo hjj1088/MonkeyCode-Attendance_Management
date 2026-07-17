@@ -41,6 +41,12 @@ jobs:
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Set build args
+        id: build_args
+        run: |
+          echo "GIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
+          echo "BUILD_TIME=${{ github.event.head_commit.timestamp }}" >> $GITHUB_ENV
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -49,3 +55,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}

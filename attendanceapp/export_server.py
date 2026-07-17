@@ -7,13 +7,22 @@ import http.server
 import json
 import io
 import os
+import platform
 import re
 import sys
 import urllib.parse
+from datetime import datetime, timezone
+
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.utils import get_column_letter
+
+try:
+    from version import GIT_SHA, BUILD_TIME        # Overwritten at Docker build time
+except ImportError:
+    GIT_SHA = 'N/A'
+    BUILD_TIME = 'N/A'
 
 
 RED_FONT = Font(color='FFFF0000')
@@ -441,6 +450,28 @@ class ExportHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=os.path.dirname(os.path.abspath(__file__)), **kwargs)
     
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == '/health':
+            self._handle_health()
+        else:
+            super().do_GET()
+    
+    def _handle_health(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        info = {
+            'status': 'ok',
+            'service': 'attendance-export-server',
+            'version': GIT_SHA,
+            'build_time': BUILD_TIME,
+            'python': platform.python_version(),
+            'server_time': datetime.now(timezone.utc).isoformat(),
+        }
+        self.wfile.write(json.dumps(info, ensure_ascii=False).encode('utf-8'))
+    
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         
@@ -523,13 +554,36 @@ class ExportHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
     
     def log_message(self, fmt, *args):
-        sys.stderr.write(fmt % args + '\n')
+        msg = "%s - - [%s] %s\n" % (
+            self.client_address[0],
+            self.log_date_time_string(),
+            fmt % args,
+        )
+        sys.stderr.write(msg)
         sys.stderr.flush()
+
+
+def _startup_banner(port):
+    lines = [
+        "=" * 60,
+        "  考勤导出服务器  Attendance Export Server",
+        "=" * 60,
+        f"  Git SHA      : {GIT_SHA}",
+        f"  Build Time   : {BUILD_TIME}",
+        f"  Python       : {platform.python_version()}",
+        f"  Port         : {port}",
+        f"  Health Check : http://0.0.0.0:{port}/health",
+        f"  Start Time   : {datetime.now(timezone.utc).isoformat()}",
+        "=" * 60,
+        "",
+    ]
+    for line in lines:
+        print(line, flush=True)
 
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8000))
+    _startup_banner(port)
     server = http.server.HTTPServer(('0.0.0.0', port), ExportHandler)
-    print(f'Server running on port {port}', flush=True)
     sys.stdout.flush()
     server.serve_forever()
