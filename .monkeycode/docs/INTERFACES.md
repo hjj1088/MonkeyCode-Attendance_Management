@@ -267,3 +267,65 @@ RulesEngine.getResultDetail(eno, date)   // 获取某天详情 (含关联源记�
 | `/*` | OPTIONS | — | 204, `Access-Control-Allow-Origin: *` (CORS 预检) |
 
 > `GET /health` 为 v2.0.3 新增端点，返回服务版本信息（Git SHA、构建时间、Python 版本）用于验证 Docker 镜像版本。`startTime`/`endTime` 为选填参数，格式 `HH:MM`（如 `08:30`/`17:30`）。传入后用于生成迟到/早退条件格式规则；未传入时自动从排班数据或打卡记录中提取，兜底默认值为 `08:30`/`17:30`。
+
+---
+
+# V3.1 REST API（数据层迁移）
+
+> 本节描述 v3.1（`attendance-v3/`）的后端 REST API。V3.1 将 V2.0 前端 `Store` 对象的所有 IndexedDB 操作映射为 HTTP 端点，`shared/api-store.js` 通过 `fetch` 调用这些端点。
+
+## 通用约定
+
+- **Base URL**：`http://localhost:8001`（V3.1 后端端口）
+- **响应格式**：所有 API 返回 JSON `{code: 0, data: ...}`；非 0 的 `code` 表示错误，`message` 携带错误说明
+- **认证**：除 `/api/auth/login` 和 `/api/auth/login-check` 外，所有 `/api/*` 请求必须携带 `Authorization: Bearer <token>` 头
+- **401 处理**：前端 `api-store.js` 收到 401 时清除凭证并跳转 `index.html`
+
+## 认证 API
+
+| 端点 | 方法 | 请求体 | 响应 |
+|------|------|--------|------|
+| `/api/auth/login` | POST | `{username: "admin", password: "admin123"}` | `{code:0, data:{token, username}}` |
+| `/api/auth/login-check` | GET | —（Bearer token） | `{code:0}` 或 401 |
+
+JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123`（后端 SHA256 哈希比对）。token 存入 `sessionStorage`，关闭标签页即失效。
+
+## Store CRUD API（映射 V2.0 Store 方法）
+
+`api-store.js` 的每个方法对应一个 REST 端点：
+
+| Store 方法 | HTTP 端点 | 说明 |
+|-----------|-----------|------|
+| `Store.getAll(table)` | `GET /api/store/{table}` | 获取全表；可选 `?index=&value=` 过滤 |
+| `Store.getByIndex(table, idx, val)` | `GET /api/store/{table}?index=&value=` | 按单列索引查询 |
+| `Store.getByRange(table, idx, lower, upper)` | `GET /api/store/{table}/range?index=&lower=&upper=` | 按索引范围查询 |
+| `Store.getByKey(table, key)` | `GET /api/store/{table}/{key}` | 按主键查询（settings 按 key，其余按 id） |
+| `Store.put(table, record)` | `POST /api/store/{table}` | 单条插入/更新（body `{record}`） |
+| `Store.bulkPut(table, records)` | `POST /api/store/{table}/bulk` | 批量插入（body `{records}`，返回 `data.count`） |
+| `Store.clearTable(table)` | `DELETE /api/store/{table}` | 清空整表 |
+| `Store.deleteByKey(table, key)` | `DELETE /api/store/{table}/{key}` | 按主键删除 |
+| `Store.resetAllData()` | `POST /api/store/reset` | 清空 13 张表并重建默认设置 |
+
+### 字段序列化规则（server.py `json_serialize`）
+
+- 对象/数组字段（`workDays`、`fields`、`sourcePunchIds` 等）在 SQLite 中存 TEXT，API 层自动 `json.dumps` / `json.loads`
+- 布尔字段（`isWorkday`、`isHoliday`、`absent`）后端存 INTEGER (0/1)，API 层序列化为 `bool`
+- `attendance_results` 与 `carry_over` 表无 `id` 主键，按业务键（如 `employeeNo+date`）语义操作
+
+## 导出 API（V3.1）
+
+| 端点 | 方法 | 请求体 | 响应 |
+|------|------|--------|------|
+| `/api/export/flat` | POST | `{records, template:{fields:[{label,field}]}, filename, startTime, endTime}` | 二进制 XLSX |
+| `/api/export/calendar` | POST | `{targetMonth:"YYYY-MM", fields, results, schedules, holidays, startTime, endTime}` | 二进制 XLSX |
+
+响应头 `Content-Disposition` 使用 `filename*=UTF-8''{urlencoded}`（RFC 5987）以支持中文文件名。逻辑与 V2.0 `export_server.py` 完全一致（`build_flat_report` / `build_calendar_report`，见 [模块/export-server-模块.md](./模块/export-server-模块.md) 与 [模块/V3.1-后端服务-模块.md](./模块/V3.1-后端服务-模块.md)）。
+
+## SQLite 数据库（V3.1）
+
+13 张表结构与 V2.0 IndexedDB 完全一致（字段名 camelCase），详见 [模块/V3.1-后端服务-模块.md](./模块/V3.1-后端服务-模块.md#sqlite-表结构)。差异点：
+
+- IndexedDB 复合主键（如 `[employeeNo+date]`）→ SQLite 无主键 + 单列索引 + 应用层约束
+- IndexedDB 复合索引（如 `[employeeNo+year+month]`）→ SQLite 单列索引 + JS 内存过滤
+- `settings` 表主键为 `key`；`employees` 表主键为 `employeeNo`
+- 默认数据由 `database.py _init_settings()` 初始化（attendance_config + 默认导出模板）

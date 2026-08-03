@@ -232,3 +232,139 @@ v2.0 新增 `shared/init.js` 兼容桥接层，为旧版 API 提供映射：
 当前版本：**v2.0.2**（Big Sur 重设计 + 条件格式修复 + Docker CI/CD + 日志/版本体系增强）。原始稳定版 v1.0.28 保留于 `attendance/` 目录。
 
 业务逻辑核心（`auth.js`、`db.js`、`matcher.js`）与 v1.0 完全一致，`rules.js` 新增了调休抵扣、`missPerson` 支持、`workHours` 计算和 `sourceOvertimeIds` 字段。
+
+---
+
+# V3.1 架构（数据层迁移）
+
+> 本节描述 **v3.1**（`attendance-v3/` 目录）相对 v2.0 的架构变化。V3.1 保留 v2.0 全部前端代码（HTML 页面、Vue 应用、业务逻辑、Excel 解析、规则引擎、UI 样式）不变，**仅替换数据层**：将 IndexedDB/Dexie 的 `Store` 对象替换为 HTTP REST API 调用，后端使用 Python `http.server` + SQLite 存储。
+
+## 概述
+
+V3.1 将 V2.0 的纯前端架构（IndexedDB 本地存储）改为**前后端分离架构**：
+
+- **前端**：`attendance-v3/client/`，与 V2.0 逐文件对应，唯一实质变化是 `shared/db.js` → `shared/api-store.js`（Store 接口签名保持完全一致）
+- **后端**：`attendance-v3/server/`，Python 标准库 `http.server` + SQLite，无第三方 Web 框架
+- **数据持久化**：浏览器 IndexedDB → 后端 SQLite 文件 `server/data/attendance.db`
+
+```
+V2.0（纯前端）                    V3.1（前后端分离）
+┌─────────────────┐              ┌──────────────────────┐
+│ 前端页面         │              │ 前端页面              │
+│ IndexedDB(Dexie)│    变为       │ api-store.js (fetch) │
+│ 本地存储        │  ──────────►  │          │ REST      │
+└─────────────────┘              └──────────▼───────────┘
+                                            │ /api/store/*
+                                            ▼
+                              ┌──────────────────────┐
+                              │ Python http.server   │
+                              │ + SQLite (attendance.db)│
+                              └──────────────────────┘
+```
+
+## 技术栈（V3.1）
+
+| 层级 | 技术 | 用途 |
+|------|------|------|
+| 前端页面 | Vue.js 3 (Options API) + bigsur.css | 与 V2.0 完全一致 |
+| 前端数据层 | `api-store.js`（fetch 封装） | 替代 V2.0 的 `db.js`（Dexie） |
+| 前端认证 | `auth.js`（sessionStorage + JWT） | 替代 V2.0 的 localStorage 布尔标志 |
+| 后端服务 | Python `http.server`（标准库） | HTTP API + 静态文件服务，单进程 |
+| 数据存储 | SQLite（`sqlite3` 标准库） | 13 张表，字段名与 V2.0 IndexedDB 完全一致（camelCase） |
+| 认证 | JWT（手写 HMAC-SHA256，HS256，24h 过期） | Bearer token 鉴权 |
+| Excel 导出 | Python `openpyxl` | 与 V2.0 `export_server.py` 相同的 XLSX 生成逻辑 |
+
+## 项目结构（V3.1）
+
+```
+attendance-v3/
+├── client/                     # 前端（自 V2.0 复制，仅数据层替换）
+│   ├── index.html              # 登录页
+│   ├── login.html              # 登录页（副本）
+│   ├── attendance.html         # 考勤计算页
+│   ├── import.html             # 数据导入页
+│   ├── export.html             # 导出中心
+│   ├── settings.html           # 系统设置页
+│   └── shared/
+│       ├── api-store.js        # ★ 数据访问层（替代 db.js）
+│       ├── auth.js             # 认证模块（JWT 版）
+│       ├── rules.js            # 规则引擎（数据调用改为 Store API）
+│       ├── excel.js            # Excel 处理
+│       ├── matcher.js          # 数据匹配（与 V2.0 逐字节相同）
+│       ├── layout.js           # 侧边栏导航（与 V2.0 相同）
+│       ├── init.js             # 兼容桥接层（改为 Store API 薄封装）
+│       └── vue.min.js / xlsx.min.js / bigsur.css
+├── server/                     # ★ 后端（新增）
+│   ├── server.py               # HTTP 服务 + 路由 + JWT + 通用 store CRUD + 静态托管
+│   ├── database.py             # SQLite 连接 + 13 表 DDL + 默认数据初始化
+│   ├── middleware.py           # PyJWT 认证模块（备用，未接入 server.py）
+│   ├── data/attendance.db      # SQLite 数据文件（运行时生成）
+│   └── handlers/
+│       ├── export.py           # ★ 导出处理器（唯一被 server.py 挂载）
+│       ├── auth.py / attendance.py / rules.py / system.py / users.py / migrate.py
+│                               # 第二套 handler（未接入路由，见下方说明）
+└── tests/                      # 单元测试
+```
+
+## 后端路由（V3.1，server.py）
+
+| 方法 | 路径 | 功能 | 认证 |
+|------|------|------|------|
+| GET | `/api/auth/login-check` | 校验 token 有效性 | 否 |
+| POST | `/api/auth/login` | 登录（仅 admin，SHA256 比对）→ 返回 JWT | 否 |
+| GET | `/api/store/{table}` | 获取全表（可选 `?index=&value=` 过滤） | 是 |
+| GET | `/api/store/{table}/range` | 范围查询 `?index=&lower=&upper=` | 是 |
+| GET | `/api/store/{table}/{key}` | 按主键查询 | 是 |
+| POST | `/api/store/{table}` | 插入/更新单条（upsert） | 是 |
+| POST | `/api/store/{table}/bulk` | 批量插入 | 是 |
+| POST | `/api/store/reset` | 清空 13 张表并重建默认设置 | 是 |
+| DELETE | `/api/store/{table}` | 清空整表 | 是 |
+| DELETE | `/api/store/{table}/{key}` | 按主键删除 | 是 |
+| POST | `/api/export/flat` | 平铺导出 XLSX | 是 |
+| POST | `/api/export/calendar` | 日历导出 XLSX | 是 |
+| OPTIONS | 任意 | CORS 预检 | 否 |
+
+非 `/api` 路径由 `_serve_static()` 托管 `client/` 静态文件，路径穿越有防护，文件不存在时 302 跳转 `index.html`。
+
+## 模块依赖关系（V3.1）
+
+```
+client 页面 (index/login/attendance/import/export/settings)
+    +-- auth.js (JWT 登录)
+    +-- layout.js (侧边栏)
+    +-- api-store.js (fetch → /api/store/*)  ← 替代 db.js
+    +-- rules.js / excel.js / matcher.js     ← 逻辑不变，数据访问走 api-store.js
+
+api-store.js ── fetch ──► server.py (/api/*) ──► database.py (SQLite)
+                          └──► handlers/export.py (openpyxl XLSX)
+```
+
+`server.py` 直接导入 `handlers/export.py`；其余 6 个 handler（auth/attendance/rules/system/users/migrate）与 `middleware.py` 属于**第二套未接入的代码**（V3.2 多角色系统前置），当前没有任何 URL 路由指向它们。
+
+## 数据流（V3.1）
+
+1. **导入阶段**：前端 `Excel.parseExcelFile()` 解析 Excel → `Store.bulkPut()` → `fetch POST /api/store/{table}/bulk` → SQLite 写入
+2. **计算阶段**：前端 `RulesEngine.calculateMonth()` → 通过 `Store.getByIndex/getByRange/getAll` 拉取排班/打卡/OA 数据 → 浏览器内存计算 → `Store.clearTable + bulkPut('attendance_results')` 回写
+3. **导出阶段**：前端读取 `attendance_results`/`schedules`/`holidays` → `POST /api/export/flat|calendar` → Python openpyxl 生成 XLSX → 二进制下载
+
+## 与 v2.0 的主要变更
+
+| 方面 | v2.0 (attendanceapp/) | v3.1 (attendance-v3/) |
+|------|------|------|
+| 数据存储 | IndexedDB（Dexie.js 4.0.8） | SQLite（`server/data/attendance.db`） |
+| 前端数据层 | `shared/db.js`（Store 封装 Dexie） | `shared/api-store.js`（Store 封装 fetch） |
+| 认证 | localStorage 布尔标志 + 前端硬编码账号 | sessionStorage JWT + 后端 `POST /api/auth/login` |
+| 导出服务 | 独立进程 `export_server.py`（端口 8000，无鉴权） | 合并进 `server.py` 的 `/api/export/*`（需 Bearer token） |
+| 服务端口 | 8000 | 8001 |
+| 复合索引查询 | Dexie `[employeeNo+year+month]` 等原生复合键 | 单列索引 + JS 内存 `filter/find` |
+| 默认配置初始化 | `db.js startDB()` 前端执行 | `database.py _init_settings()` 后端执行 |
+| 物理持久化 | 浏览器本地（换浏览器丢失） | 后端文件（服务端持久化） |
+
+**前端零改动的关键**：`api-store.js` 保持 V2.0 `Store` 对象所有方法签名（`getAll/bulkPut/clearTable/getByIndex/getByRange/getByKey/put/deleteByKey/resetAllData`）不变，业务代码仅 4 处复合索引查询改为单索引 + 内存过滤（见 `rules.js`、`attendance.html`）。
+
+## V3.1 已知情况（如实记录）
+
+1. **未接入的 handler**：`handlers/auth.py`、`attendance.py`、`rules.py`、`system.py`、`users.py`、`migrate.py` 及 `middleware.py` 存在但未挂载到任何路由；它们依赖的 `users` 表、`operation_logs` 表、snake_case 字段在 `database.py` 的 13 张 camelCase 表中不存在，属于另一套（V3.2 多角色系统）的未完成代码。
+2. **两套认证并存**：`server.py` 手写 HMAC JWT（硬编码 secret、admin/admin123 SHA256）与 `middleware.py` 的 PyJWT 认证互不兼容，后者未使用。
+3. **测试与实现脱节**：`tests/` 中部分测试引用 `database.init_tables()`、15 张表等，与当前 `init_db()`、13 张表实现不符，测试无法通过。
+4. **login.html 遗留问题**：V3.1 的 `login.html` 第 74 行仍按 V2.0 同步风格调用异步 `Auth.login()`，登录不可用；实际入口是 `index.html`（已迁移为 `.then()` 风格）。

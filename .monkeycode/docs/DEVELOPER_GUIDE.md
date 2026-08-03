@@ -114,3 +114,82 @@ DB.version(2).stores({
 8. **跨页功能**：v2.0 的 bigsur.css 和 layout.js 与 v1.0 (attendance/) 页面不兼容，两套代码独立部署
 9. **Docker 镜像**：构建于 `python:3.12-slim` 基础镜像，仅支持 amd64 架构，无 arm64 支持。旧版 Docker daemon 的 docker-proxy 偶发僵尸状态，需 `systemctl restart docker` 恢复
 10. **条件格式兼容性**：迟到/早退条件格式依赖 Excel 原生公式（`TIMEVALUE`/`MOD(ROW())`），部分非 Microsoft 软件（如 WPS 旧版）可能不完全支持
+
+---
+
+# V3.1 开发指南（数据层迁移）
+
+> 本节描述 v3.1（`attendance-v3/`）的运行、开发与排错方法。V3.1 是前后端分离架构：前端静态页面 + Python http.server + SQLite 后端。
+
+## 环境搭建（V3.1）
+
+```bash
+# 安装 Python 依赖（openpyxl 用于导出）
+pip install openpyxl
+
+# 启动后端（端口 8001，同时提供 API + 静态文件托管）
+python3 /workspace/attendance-v3/server/server.py
+```
+
+访问 `http://localhost:8001` 即可。首次启动时 `database.py` 自动建库建表并写入默认数据（attendance_config + 默认导出模板）。数据库文件位于 `server/data/attendance.db`。
+
+**登录账号**：`admin` / `admin123`（后端校验，非前端硬编码）。
+
+## V3.1 架构速览
+
+- **前端** `attendance-v3/client/`：与 V2.0 逐文件对应，`shared/db.js` 替换为 `shared/api-store.js`
+- **后端** `attendance-v3/server/server.py`：HTTP 服务 + JWT 认证 + 通用 store CRUD + 静态托管
+- **数据层** `attendance-v3/server/database.py`：SQLite 13 张表（字段 camelCase 与 V2.0 IndexedDB 一致）
+- **导出** `attendance-v3/server/handlers/export.py`：V2.0 `export_server.py` 逻辑移植
+
+## 数据访问约定（V3.1）
+
+所有前端数据操作经 `Store` 对象（`shared/api-store.js`），内部 `fetch` 调用后端 REST API：
+
+```js
+await Store.getAll('punch_records');                    // GET /api/store/punch_records
+await Store.bulkPut('punch_records', records);          // POST /api/store/punch_records/bulk
+await Store.getByIndex('schedules', 'employeeNo', '001'); // GET ?index=employeeNo&value=001
+await Store.getByKey('settings', 'attendance_config');   // GET /api/store/settings/attendance_config
+await Store.clearTable('attendance_results');            // DELETE /api/store/attendance_results
+await Store.resetAllData();                              // POST /api/store/reset
+```
+
+认证 token 存 `sessionStorage.token`，`api-store.js` 的 `_request()` 自动附加 `Authorization: Bearer` 头；401 时自动登出跳转 `index.html`。
+
+## 新增数据导入类型（V3.1）
+
+步骤与 V2.0 相同（`excel.js` 的 `identifyFileType()` / `_normalizeRecord()`），仅数据写入由 `Store.bulkPut` 走 REST API。V3.1 无需在 `db.js` 中建表——表结构在 `server/database.py` 的 DDL 中维护。
+
+## 修改数据库结构（V3.1）
+
+1. 编辑 `server/database.py` 的 `init_db()` DDL，新增/修改表或字段
+2. 若字段是 JSON 对象（如 `workDays`），确认 `server.py` 的 `json_serialize` 覆盖序列化
+3. 删除旧 `server/data/attendance.db` 重建（或手动 `ALTER TABLE`）
+4. 重启服务
+
+## 调试方法（V3.1）
+
+- **查看后端日志**：`server.py` 输出到 stdout，前台运行时直接可见
+- **查看 SQLite 数据**：`sqlite3 server/data/attendance.db '.tables'` 或直接查询
+- **测试 API**：`curl -X POST http://localhost:8001/api/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin123"}'` 获取 token 后带 Bearer 访问
+- **重置数据**：设置页"重置数据库"按钮或 `POST /api/store/reset`
+
+## V3.1 已知限制与遗留问题
+
+1. **login.html 不可用**：`login.html` 仍按 V2.0 同步风格调用异步 `Auth.login()`（未 await），登录报错；实际入口应使用 `index.html`
+2. **未接入的 handler**：`handlers/` 下 auth/attendance/rules/system/users/migrate 及 `middleware.py` 未挂载到任何路由，依赖的 `users`/`operation_logs` 表与 snake_case 字段在当前 schema 中不存在
+3. **测试不通过**：`tests/` 部分测试与当前实现不符（`init_tables()` vs `init_db()`、15 表 vs 13 表）
+4. **跨设备同步**：SQLite 单文件存储，多用户同时写入依赖 WAL 模式（已启用），但无锁/无并发控制
+
+## V3.1 与 V2.0 并存部署
+
+```bash
+# V2.0（端口 8000，IndexedDB）
+python3 /workspace/attendanceapp/export_server.py
+
+# V3.1（端口 8001，SQLite + REST API）
+python3 /workspace/attendance-v3/server/server.py
+```
+
+两套代码独立部署、数据相互隔离（V2.0 数据在浏览器 IndexedDB，V3.1 数据在后端 SQLite），可并行运行对比验证。
