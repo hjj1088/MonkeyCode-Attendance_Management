@@ -68,9 +68,10 @@ V3.1 代码位置：`/workspace/attendance-v3/`
     - POST 到 /api/export/flat，接收 blob 后用 URL.createObjectURL 触发下载
     - exportCalendarReport() 同理调用 /api/export/calendar
     - 保持 Excel._apiExport() 方法签名不变
-  - [ ] 2.5 为前端适配编写集成测试
+  - [x] 2.5 为前端适配编写集成测试
     - 测试 Store API 各方法与后端交互正确
     - 测试认证流程前端到后端完整链路
+    - 覆盖 getByKey/deleteByKey 各表主键（employees 文本主键、settings key），验证 401 跳转与 JSON 字段序列化
 
 - [x] 3. 验证 -- 确保 V3.1 与 V2.0 业务行为一致
   - [x] 3.1 导入验证 -- 用 V2.0 测试数据完整跑通导入流程
@@ -84,9 +85,10 @@ V3.1 代码位置：`/workspace/attendance-v3/`
     - 平铺导出 → 验证字段完整性
     - 日历导出 → 验证条件格式和颜色
     - V3.1.1 增强：格子逻辑（缺卡→缺勤、出差信息补齐、下午补文字）12 场景测试 + 真实数据验证
-  - [ ] 3.4 设置页验证 -- 验证配置保存/读取正常
+  - [x] 3.4 设置页验证 -- 验证配置保存/读取正常
     - 修改考勤规则 → 验证 config_updated_at 更新
-    - 添加假期 → 验证 calculateMonth 识别正确
+    - 添加假期 → 验证 calculateMonth 识别正确（春节假期→rest、调休上班→normal）
+    - 暴露并修复：attendance_results 表缺 missTime 列（rules.js 写入报错）→ database.py 加列 + ALTER TABLE 迁移
 
 ---
 

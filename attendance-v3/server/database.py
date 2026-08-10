@@ -137,7 +137,8 @@ def init_db():
             sourceLeaveIds TEXT NOT NULL DEFAULT '[]',
             sourceTravelIds TEXT NOT NULL DEFAULT '[]',
             sourceMissIds TEXT NOT NULL DEFAULT '[]',
-            sourceOvertimeIds TEXT NOT NULL DEFAULT '[]'
+            sourceOvertimeIds TEXT NOT NULL DEFAULT '[]',
+            missTime TEXT NOT NULL DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS carry_over (
@@ -195,6 +196,9 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_employees_name ON employees(name);
     """)
 
+    # Migrations for pre-existing databases (CREATE TABLE IF NOT EXISTS won't add columns)
+    _migrate(conn)
+
     conn.commit()
 
     # Init default settings (matching V2.0 initDefaultSettings)
@@ -202,6 +206,12 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+
+def _migrate(conn):
+    results_cols = {row[1] for row in conn.execute("PRAGMA table_info(attendance_results)").fetchall()}
+    if 'missTime' not in results_cols:
+        conn.execute("ALTER TABLE attendance_results ADD COLUMN missTime TEXT NOT NULL DEFAULT ''")
 
 
 def _init_settings(conn):

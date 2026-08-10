@@ -5,3 +5,4 @@ __pycache__/
 .vscode/
 node_modules/
 *.db
+attendanceapp/test_conditional_format.xlsx

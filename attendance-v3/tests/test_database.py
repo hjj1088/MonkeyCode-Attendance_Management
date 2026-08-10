@@ -63,6 +63,6 @@ def test_attendance_results_schema():
         'employeeNo', 'name', 'department', 'date', 'month', 'status',
         'signIn', 'signOut', 'lateMinutes', 'earlyMinutes',
         'overtimeHours', 'travelHours', 'leaveHours', 'workHours',
-        'absent', 'leaveType', 'isRestDay',
+        'absent', 'leaveType', 'isRestDay', 'missTime',
     }
     assert expected_columns.issubset(columns), f"Missing columns: {expected_columns - columns}"

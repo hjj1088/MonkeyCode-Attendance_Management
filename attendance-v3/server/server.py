@@ -18,6 +18,13 @@ JWT_SECRET = 'attendance-v3-secret-key-2026'
 ADMIN_PASSWORD_HASH = hashlib.sha256('admin123'.encode()).hexdigest()
 PORT = 8001
 
+# Map tables whose primary key is not the autoincrement `id` column
+# (mirrors V2.0 IndexedDB primary keys, keeps Store.getByKey/deleteByKey signature-compatible)
+PRIMARY_KEYS = {
+    'employees': 'employeeNo',
+    'settings': 'key',
+}
+
 
 def b64url_encode(data):
     return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
@@ -316,10 +323,8 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
     def _handle_store_get_by_key(self, table, key):
         conn = get_db()
         try:
-            if table == 'settings':
-                row = conn.execute('SELECT * FROM settings WHERE key = ?', (key,)).fetchone()
-            else:
-                row = conn.execute(f'SELECT * FROM {table} WHERE id = ?', (int(key),)).fetchone()
+            pk = PRIMARY_KEYS.get(table, 'id')
+            row = conn.execute(f'SELECT * FROM {table} WHERE "{pk}" = ?', (key,)).fetchone()
             conn.close()
             if row:
                 self._send_json(0, data=json_serialize(dict(row)))
@@ -420,10 +425,8 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
     def _handle_store_delete_by_key(self, table, key):
         conn = get_db()
         try:
-            if table == 'settings':
-                conn.execute('DELETE FROM settings WHERE key = ?', (key,))
-            else:
-                conn.execute(f'DELETE FROM {table} WHERE id = ?', (int(key),))
+            pk = PRIMARY_KEYS.get(table, 'id')
+            conn.execute(f'DELETE FROM {table} WHERE "{pk}" = ?', (key,))
             conn.commit()
             conn.close()
             self._send_json(0, data={'ok': True})
