@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>考勤规则设置 - 考勤管理系统</title>
+  <link rel="stylesheet" href="shared/bigsur.css">
+  <style>[v-cloak] { display: none; }</style>
+</head>
+<body>
+<div id="app" v-cloak>
+  <div class="app-shell">
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="sidebar-brand">考勤管理</div>
+      </div>
+      <nav id="sidebar-nav"></nav>
+      <div class="sidebar-footer">
+        <button class="logout-btn" @click="handleLogout">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          退出登录
+        </button>
+      </div>
+    </aside>
+    <div id="sidebar-overlay" class="sidebar-overlay hidden" onclick="AppLayout.closeMenu()"></div>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="hamburger-btn" onclick="AppLayout.toggleMenu()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <span id="header-greeting"></span>
+      </header>
+      <div class="page-container">
+
+        <div v-if="saved" class="alert alert-info mb-md">设置已保存，请前往考勤计算页点击「重新计算」使新规则生效。</div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">考勤规则配置</h2>
+            <button @click="saveConfig" class="btn btn-primary">保存设置</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="form-group">
+              <label class="form-label">上班时间</label>
+              <input v-model="config.workStartTime" type="time" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">下班时间</label>
+              <input v-model="config.workEndTime" type="time" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">迟到阈值 (分钟)</label>
+              <input v-model.number="config.lateThreshold" type="number" min="0" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">早退阈值 (分钟)</label>
+              <input v-model.number="config.earlyThreshold" type="number" min="0" class="form-input">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title mb-md">容错规则配置</h2>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="form-group">
+              <label class="form-label">每月豁免次数</label>
+              <input v-model.number="config.graceTimes" type="number" min="0" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">累计豁免时长 (分钟)</label>
+              <input v-model.number="config.graceMinutes" type="number" min="0" class="form-input">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title mb-md">假期管理</h2>
+          <div class="flex flex-wrap gap-sm mb-md" style="align-items:flex-end">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">开始日期</label>
+              <input v-model="newHoliday.startDate" type="date" class="form-input">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">结束日期</label>
+              <input v-model="newHoliday.endDate" type="date" class="form-input">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">假期名称</label>
+              <input v-model="newHoliday.name" type="text" placeholder="例：春节" class="form-input" style="width:130px">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">类型</label>
+              <select v-model="newHoliday.type" class="form-select">
+                <option value="holiday">休息日</option>
+                <option value="workday">调休上班日</option>
+              </select>
+            </div>
+            <button @click="addHolidays" class="btn btn-primary">批量添加</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div v-for="h in holidays" :key="h.id" class="flex-between" style="padding:8px 12px;background:var(--paper);border-radius:var(--radius-sm)">
+              <span style="font-size:13px">{{ h.date }} - {{ h.name }} <span class="badge" :class="h.isWorkday ? 'badge-normal' : 'badge-late'">{{ h.isWorkday ? '上班' : '休息' }}</span></span>
+              <button @click="deleteHoliday(h.id)" class="btn btn-ghost btn-sm" style="color:var(--vermillion)">删除</button>
+            </div>
+            <div v-if="holidays.length === 0" style="padding:16px;text-align:center;font-size:13px;color:var(--text-secondary)">暂无假期设置</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title mb-md">数据管理</h2>
+          <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">清空所有导入数据和分析结果，保留设置。</p>
+          <button @click="resetDB" :disabled="resetting" class="btn btn-secondary" style="color:var(--vermillion);border-color:var(--vermillion)">
+            {{ resetting ? '重置中...' : '重置数据库' }}
+          </button>
+          <span v-if="resetDone" style="margin-left:12px;font-size:13px;color:var(--jade)">已重置</span>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="shared/vue.min.js"></script>
+<script src="shared/auth.js"></script>
+<script src="shared/layout.js"></script>
+<script src="shared/api-store.js"></script>
+<script>
+Auth.requireAuth();
+
+const { createApp } = Vue;
+createApp({
+  data() {
+    return {
+      saved: false,
+      resetting: false,
+      resetDone: false,
+      config: { workStartTime:'08:30', workEndTime:'17:30', lateThreshold:0, earlyThreshold:0, graceTimes:2, graceMinutes:30 },
+      holidays: [],
+      newHoliday: { startDate:'', endDate:'', name:'', type:'holiday' }
+    };
+  },
+  async created() {
+    const entry = await Store.getByKey('settings', 'attendance_config');
+    if (entry && entry.value) Object.assign(this.config, entry.value);
+    this.holidays = await Store.getAll('holidays');
+  },
+  methods: {
+    async saveConfig() {
+      await Store.put('settings', { key:'attendance_config', value:{...this.config} });
+      await Store.put('settings', { key:'config_updated_at', value:Date.now() });
+      this.saved = true;
+      setTimeout(() => { this.saved = false; }, 4000);
+    },
+    async addHolidays() {
+      const start = this.newHoliday.startDate;
+      const end = this.newHoliday.endDate || start;
+      if (!start) return;
+      if (start > end) { alert('结束日期不能早于开始日期'); return; }
+      const isWorkday = this.newHoliday.type === 'workday';
+      const name = this.newHoliday.name || (isWorkday ? '调休上班' : '假期');
+      const sd = new Date(start + 'T00:00:00');
+      const ed = new Date(end + 'T00:00:00');
+      const records = [];
+      for (let d = new Date(sd); d <= ed; d.setDate(d.getDate() + 1)) {
+        records.push({ date: d.toISOString().slice(0,10), name, isWorkday, isHoliday:!isWorkday });
+      }
+      await Store.bulkPut('holidays', records);
+      await Store.put('settings', { key:'config_updated_at', value:Date.now() });
+      this.holidays = await Store.getAll('holidays');
+      this.newHoliday = { startDate:'', endDate:'', name:'', type:'holiday' };
+    },
+    async deleteHoliday(id) {
+      await Store.deleteByKey('holidays', id);
+      await Store.put('settings', { key:'config_updated_at', value:Date.now() });
+      this.holidays = await Store.getAll('holidays');
+    },
+    async resetDB() {
+      if (!confirm('确定要清空所有导入数据和考勤结果吗？此操作不可恢复。')) return;
+      this.resetting = true;
+      this.resetDone = false;
+      try { await Store.resetAllData(); this.resetDone = true; this.holidays = []; }
+      catch (err) { alert('重置失败: ' + err.message); }
+      this.resetting = false;
+    },
+    handleLogout() { Auth.logout(); }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

@@ -31,11 +31,9 @@
       </div>
 
       <button id="login-btn" class="btn btn-primary" style="width:100%;justify-content:center;">登录</button>
-      <div id="login-version" class="login-version" style="text-align:center;margin-top:16px;font-size:12px;color:var(--gray-5, #8a8f98);"></div>
     </div>
   </div>
 
-  <script src="shared/dexie.min.js"></script>
   <script src="shared/auth.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -50,15 +48,6 @@
       const errorEl = document.getElementById('login-error');
 
       usernameInput.focus();
-
-      fetch('/health')
-        .then(r => r.json())
-        .then(info => {
-          if (info && info.app_version) {
-            document.getElementById('login-version').textContent = 'V2.0 考勤管理系统';
-          }
-        })
-        .catch(() => {});
 
       function showError(msg) {
         errorEl.textContent = msg;
@@ -79,19 +68,17 @@
           return;
         }
 
-        loginBtn.disabled = true;
+         loginBtn.disabled = true;
         loginBtn.textContent = '登录中...';
-
-        const result = Auth.login(username, password);
-
-        if (result.success) {
-          localStorage.setItem('attendance_user', username);
-          window.location.href = 'attendance.html';
-        } else {
-          showError(result.message || '账号或密码错误');
-          loginBtn.disabled = false;
-          loginBtn.textContent = '登录';
-        }
+        Auth.login(username, password).then(result => {
+          if (result.success) {
+            window.location.href = 'attendance.html';
+          } else {
+            showError(result.message || '账号或密码错误');
+            loginBtn.disabled = false;
+            loginBtn.textContent = '登录';
+          }
+        });
       }
 
       loginBtn.addEventListener('click', handleLogin);

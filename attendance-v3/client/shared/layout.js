@@ -89,14 +89,15 @@ const AppLayout = {
   _updateVersion() {
     const footer = document.querySelector('.sidebar-footer');
     if (!footer) return;
-    fetch('/health')
+    fetch('/api/system/version')
       .then(r => r.json())
-      .then(info => {
-        if (info && info.app_version) {
+      .then(res => {
+        const v = res && res.data;
+        if (v && v.version_name) {
           const div = document.createElement('div');
           div.className = 'sidebar-version';
           div.style.cssText = 'padding:8px 20px;font-size:11px;color:#8a8f98;text-align:center;';
-          div.textContent = 'V2.0 考勤管理系统';
+          div.textContent = 'V3.1 考勤管理系统';
           footer.appendChild(div);
         }
       })

@@ -35,7 +35,6 @@
     </div>
   </div>
 
-  <script src="shared/dexie.min.js"></script>
   <script src="shared/auth.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -51,11 +50,12 @@
 
       usernameInput.focus();
 
-      fetch('/health')
+      fetch('/api/system/version')
         .then(r => r.json())
-        .then(info => {
-          if (info && info.app_version) {
-            document.getElementById('login-version').textContent = 'V2.0 考勤管理系统';
+        .then(res => {
+          const v = res && res.data;
+          if (v && v.version_name) {
+            document.getElementById('login-version').textContent = 'V3.1 考勤管理系统';
           }
         })
         .catch(() => {});

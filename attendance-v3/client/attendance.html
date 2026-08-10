@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>考勤计算 - 考勤管理系统</title>
+  <link rel="stylesheet" href="shared/bigsur.css">
+  <style>
+    [v-cloak] { display: none; }
+    .cal-cell { min-height: 76px; border-radius: var(--radius-sm); transition: all 0.15s; cursor: pointer; padding: 4px 6px; font-size: 12px; }
+    .cal-cell:hover { transform: scale(1.03); z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+    .cal-cell.cal-normal    { background: rgba(45,125,70,0.06); border: 1px solid rgba(45,125,70,0.2); }
+    .cal-cell.cal-abnormal  { background: rgba(196,61,61,0.06); border: 1px solid rgba(196,61,61,0.15); }
+    .cal-cell.cal-absent    { background: rgba(196,61,61,0.1); border: 1px solid rgba(196,61,61,0.25); }
+    .cal-cell.cal-rest      { background: rgba(0,0,0,0.03); border: 1px solid var(--border); }
+    .cal-cell.cal-leave     { background: rgba(59,89,152,0.06); border: 1px solid rgba(59,89,152,0.2); }
+    .cal-cell.cal-travel    { background: rgba(139,94,60,0.06); border: 1px solid rgba(139,94,60,0.2); }
+    .cal-cell.cal-overtime  { background: rgba(201,169,110,0.1); border: 1px solid rgba(201,169,110,0.3); }
+    .cal-cell.cal-unknown   { background: rgba(0,0,0,0.02); border: 1px solid var(--border); }
+    .cal-cell.cal-holiday   { background: rgba(196,61,61,0.05); border: 1px solid rgba(196,61,61,0.2); }
+    .cal-day { font-size: 13px; font-weight: 600; }
+    .cal-time { font-size: 11px; color: var(--text-secondary); }
+    .cal-status { font-size: 10px; font-weight: 600; margin-top: 2px; }
+
+    .detail-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+      display: flex; align-items: center; justify-content: center; z-index: 200;
+    }
+    .detail-modal {
+      background: var(--card-bg); border-radius: var(--radius-xl);
+      box-shadow: 0 16px 48px rgba(44,36,22,0.15);
+      width: 90vw; max-width: 720px; max-height: 85vh;
+      overflow-y: auto; padding: 24px;
+    }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .detail-grid .dg-label { font-size: 12px; color: var(--text-secondary); }
+    .detail-grid .dg-value { font-size: 14px; font-weight: 500; }
+
+    .filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+    .filter-bar input, .filter-bar select { padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-family: var(--font-sans); background: var(--card-bg); color: var(--text); }
+    .filter-bar input:focus, .filter-bar select:focus { outline: none; border-color: var(--vermillion); }
+
+    .section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; margin-top: 16px; }
+    .source-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+    .source-table th { background: var(--paper); padding: 4px 8px; text-align: left; border: 1px solid var(--border); font-weight: 600; }
+    .source-table td { padding: 4px 8px; border: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+<div id="app" v-cloak>
+  <div class="app-shell">
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="sidebar-brand">考勤管理</div>
+      </div>
+      <nav id="sidebar-nav"></nav>
+      <div class="sidebar-footer">
+        <button class="logout-btn" @click="handleLogout">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          退出登录
+        </button>
+      </div>
+    </aside>
+    <div id="sidebar-overlay" class="sidebar-overlay hidden" onclick="AppLayout.closeMenu()"></div>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="hamburger-btn" onclick="AppLayout.toggleMenu()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <span id="header-greeting"></span>
+      </header>
+      <div class="page-container">
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">考勤计算</h2>
+            <div class="flex gap-sm">
+              <button @click="viewMode = 'list'" :class="viewMode === 'list' ? 'btn-primary' : 'btn-secondary'" class="btn btn-sm">列表</button>
+              <button @click="viewMode = 'calendar'" :class="viewMode === 'calendar' ? 'btn-primary' : 'btn-secondary'" class="btn btn-sm">日历</button>
+              <button @click="runCalculation" :disabled="calculating" class="btn btn-primary btn-sm">
+                {{ calculating ? '计算中...' : '重新计算' }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="configChanged" class="alert alert-error" style="display:flex;justify-content:space-between;align-items:center">
+            <span>考勤规则已变更，当前结果可能不是最新规则计算的。</span>
+            <button @click="runCalculation" class="btn btn-primary btn-sm">重新计算</button>
+          </div>
+
+          <div v-if="scheduleMissing" class="alert alert-error">
+            未找到{{ currentMonth }}排班数据，所有日期默认视为上班日。请前往 <a href="import.html" style="color:var(--vermillion);font-weight:600;text-decoration:underline">数据导入</a> 上传排班表。
+          </div>
+
+          <div class="filter-bar">
+            <input v-model="currentMonth" type="month">
+            <select v-model="filterDept">
+              <option value="">全部部门</option>
+              <option v-for="d in departments" :key="d" :value="d">{{ d }}</option>
+            </select>
+            <select v-model="filterStatus">
+              <option value="">全部状态</option>
+              <option value="normal">正常</option>
+              <option value="rest">休息</option>
+              <option value="abnormal">迟到</option>
+              <option value="leave">请假</option>
+              <option value="travel">出差</option>
+              <option value="absent">缺勤</option>
+              <option value="overtime">疑似加班</option>
+              <option value="suspect_ot">疑似加班</option>
+            </select>
+            <input v-model="searchName" type="text" placeholder="搜索姓名" style="width:120px">
+          </div>
+
+          <div v-if="viewMode === 'list'" v-show="viewMode === 'list'">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>考勤号</th><th>姓名</th><th>部门</th><th>日期</th><th>排班</th>
+                    <th>签到</th><th>签退</th><th>迟到(min)</th><th>早退(min)</th>
+                    <th>加班(h)</th><th>备注</th><th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="r in filteredResults" :key="r.employeeNo + r.date" style="cursor:pointer" @click="showDetail(r)">
+                    <td>{{ r.employeeNo }}</td>
+                    <td>{{ r.name }}</td>
+                    <td>{{ r.department }}</td>
+                    <td>{{ r.date }}</td>
+                    <td>{{ holidayMap[r.date] ? holidayMap[r.date].name : (r.isRestDay ? '休息' : '上班') }}</td>
+                    <td>{{ r.signIn || '--' }}</td>
+                    <td>{{ r.signOut || '--' }}</td>
+                    <td>{{ r.lateMinutes || 0 }}</td>
+                    <td>{{ r.earlyMinutes || 0 }}</td>
+                    <td>{{ r.overtimeHours || 0 }}</td>
+                    <td style="font-size:12px">{{ remarkText(r) }}</td>
+                    <td><span class="badge" :class="statusBadgeClass(r.status)">{{ statusLabel(r.status) }}</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-if="filteredResults.length === 0 && !calculating" class="text-center" style="padding:40px;color:var(--text-secondary);font-size:14px">
+              暂无数据，请先 <a href="import.html" style="color:var(--vermillion);font-weight:500">导入数据</a> 后计算
+            </div>
+          </div>
+
+          <div v-if="viewMode === 'calendar'" v-show="viewMode === 'calendar'">
+            <div class="filter-bar">
+              <span style="font-size:13px;color:var(--text-secondary)">当前员工:</span>
+              <select v-model="calEmployee" @change="buildCalendar">
+                <option value="">-- 全部 --</option>
+                <option v-for="emp in calendarEmployees" :key="emp.employeeNo" :value="emp.employeeNo">{{ emp.name }} ({{ emp.employeeNo }})</option>
+              </select>
+              <span v-if="calEmployee && calEmployeeInfo" style="font-size:13px;color:var(--text-secondary)">{{ calEmployeeInfo.department }}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px">
+              <div v-for="d in ['一','二','三','四','五','六','日']" :key="d" class="text-center" style="font-size:13px;font-weight:600;color:var(--text-secondary);padding:4px 0">{{ d }}</div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">
+              <div v-for="cell in calendarCells" :key="cell.key" class="cal-cell" :class="cell.statusClass" @click="cell.record && showDetail(cell.record)">
+                <div class="cal-day">{{ cell.day }}</div>
+                <div v-if="cell.record" style="margin-top:2px">
+                  <div class="cal-time">{{ cell.record.signIn || '--' }} / {{ cell.record.signOut || '--' }}</div>
+                  <div v-if="cell.record.isRestDay && !cell.holidayName" style="color:var(--text-secondary);font-size:10px">休息日</div>
+                  <div v-if="cell.holidayName" style="color:var(--vermillion);font-weight:600;font-size:10px">{{ cell.holidayName }}</div>
+                  <div v-if="cell.record.status !== 'normal' && cell.record.status !== 'rest'" class="cal-status" :style="{color: statusColor(cell.record.status)}">{{ statusLabel(cell.record.status) }}</div>
+                </div>
+                <div v-if="!cell.record && cell.holidayName" style="color:var(--vermillion);font-weight:600;font-size:10px;margin-top:2px">{{ cell.holidayName }}</div>
+                <div v-else-if="!cell.record && cell.isRest" style="color:var(--text-secondary);font-size:10px;margin-top:2px">休息</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="detail" class="detail-overlay" @click.self="detail = null">
+          <div class="detail-modal">
+            <div class="flex-between" style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+              <h3 style="font-size:16px;font-weight:600">{{ detail.name }} - {{ detail.date }} 详情</h3>
+              <button class="btn btn-ghost btn-sm" @click="detail = null">关闭</button>
+            </div>
+            <div class="detail-grid">
+              <div><span class="dg-label">考勤号</span><div class="dg-value">{{ detail.employeeNo }}</div></div>
+              <div><span class="dg-label">部门</span><div class="dg-value">{{ detail.department }}</div></div>
+              <div><span class="dg-label">签到</span><div class="dg-value">{{ detail.signIn || '--' }}</div></div>
+              <div><span class="dg-label">签退</span><div class="dg-value">{{ detail.signOut || '--' }}</div></div>
+              <div><span class="dg-label">迟到</span><div class="dg-value">{{ detail.lateMinutes }}min</div></div>
+              <div><span class="dg-label">早退</span><div class="dg-value">{{ detail.earlyMinutes }}min</div></div>
+              <div><span class="dg-label">加班</span><div class="dg-value">{{ detail.overtimeHours }}h</div></div>
+              <div><span class="dg-label">出差</span><div class="dg-value">{{ detail.travelHours }}h</div></div>
+              <div><span class="dg-label">请假类型</span><div class="dg-value">{{ detail.leaveType || '--' }} <span v-if="detail.leaveHours">({{ detail.leaveHours }}h)</span></div></div>
+              <div><span class="dg-label">状态</span><div class="dg-value"><span class="badge" :class="statusBadgeClass(detail.status)">{{ statusLabel(detail.status) }}</span></div></div>
+              <div><span class="dg-label">排班</span><div class="dg-value">{{ detail.isRestDay ? '休息' : '上班' }}</div></div>
+            </div>
+            <div v-if="detail.sourcePunches && detail.sourcePunches.length">
+              <div class="section-title">关联打卡记录</div>
+              <table class="source-table"><thead><tr><th>签到</th><th>签退</th><th>迟到</th><th>早退</th></tr></thead>
+              <tbody><tr v-for="p in detail.sourcePunches" :key="p.id"><td>{{ p.signIn }}</td><td>{{ p.signOut }}</td><td>{{ p.lateMinutes }}</td><td>{{ p.earlyMinutes }}</td></tr></tbody></table>
+            </div>
+            <div v-if="detail.sourceLeaves && detail.sourceLeaves.length">
+              <div class="section-title">关联请假记录</div>
+              <table class="source-table"><thead><tr><th>类型</th><th>开始</th><th>结束</th><th>天数</th><th>小时</th></tr></thead>
+              <tbody><tr v-for="l in detail.sourceLeaves" :key="l.id"><td>{{ l.leaveType }}</td><td>{{ l.startDate }}</td><td>{{ l.endDate }}</td><td>{{ l.leaveDays }}</td><td>{{ l.leaveHours }}</td></tr></tbody></table>
+            </div>
+            <div v-if="detail.sourceTravels && detail.sourceTravels.length">
+              <div class="section-title">关联出差记录</div>
+              <table class="source-table"><thead><tr><th>开始</th><th>结束</th><th>目的地</th><th>事由</th></tr></thead>
+              <tbody><tr v-for="t in detail.sourceTravels" :key="t.id"><td>{{ t.startDate }}</td><td>{{ t.endDate }}</td><td>{{ t.destination }}</td><td>{{ t.reason }}</td></tr></tbody></table>
+            </div>
+            <div v-if="detail.sourceMisses && detail.sourceMisses.length">
+              <div class="section-title">关联漏打卡说明</div>
+              <table class="source-table"><thead><tr><th>日期</th><th>说明</th></tr></thead>
+              <tbody><tr v-for="m in detail.sourceMisses" :key="m.id"><td>{{ m.missDate }}</td><td>{{ m.reason }}</td></tr></tbody></table>
+            </div>
+            <div v-if="detail.sourceOvertimes && detail.sourceOvertimes.length">
+              <div class="section-title">关联加班记录</div>
+              <table class="source-table"><thead><tr><th>开始</th><th>结束</th><th>小时</th><th>内容</th></tr></thead>
+              <tbody><tr v-for="o in detail.sourceOvertimes" :key="o.id"><td>{{ o.startTime }}</td><td>{{ o.endTime }}</td><td>{{ o.overtimeHours }}</td><td>{{ o.content }}</td></tr></tbody></table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="shared/vue.min.js"></script>
+<script src="shared/auth.js"></script>
+<script src="shared/layout.js"></script>
+<script src="shared/api-store.js"></script>
+<script src="shared/rules.js"></script>
+<script>
+Auth.requireAuth();
+
+const { createApp } = Vue;
+createApp({
+  data() {
+    return {
+      viewMode: 'list',
+      calculating: false,
+      configChanged: false,
+      scheduleMissing: false,
+      currentMonth: '',
+      filterDept: '',
+      filterStatus: '',
+      searchName: '',
+      results: [],
+      detail: null,
+      departments: [],
+      calendarCells: [],
+      calEmployee: '',
+      calendarEmployees: [],
+      holidayMap: {}
+    };
+  },
+  computed: {
+    filteredResults() {
+      let list = this.results;
+      if (this.filterDept) list = list.filter(r => r.department === this.filterDept);
+      if (this.filterStatus) list = list.filter(r => r.status === this.filterStatus);
+      if (this.searchName) list = list.filter(r => r.name.includes(this.searchName));
+      list = [...list].sort((a, b) => {
+        if (a.employeeNo !== b.employeeNo) {
+          const na = parseInt(a.employeeNo) || 0;
+          const nb = parseInt(b.employeeNo) || 0;
+          if (na !== nb) return na - nb;
+          return String(a.employeeNo).localeCompare(String(b.employeeNo));
+        }
+        if (a.department !== b.department) return a.department.localeCompare(b.department);
+        return a.date.localeCompare(b.date);
+      });
+      return list;
+    },
+    calEmployeeInfo() {
+      if (!this.calEmployee) return null;
+      const r = this.results.find(r => r.employeeNo === this.calEmployee);
+      return r ? { name: r.name, department: r.department } : null;
+    }
+  },
+  async created() {
+    this.currentMonth = await this.detectDataMonth();
+    await this.loadResults();
+  },
+  watch: {
+    currentMonth() { this.loadResults(); },
+    viewMode() { if (this.viewMode === 'calendar') this.buildCalendar(); }
+  },
+  methods: {
+    statusLabel(s) {
+      const m = { normal:'正常', rest:'休息', abnormal:'迟到', leave:'请假', travel:'出差', absent:'缺勤', overtime:'疑似加班', suspect_ot:'疑似加班', no_sign_in:'上班未打卡', no_sign_out:'下班未打卡' };
+      return m[s] || s;
+    },
+    statusBadgeClass(s) {
+      const m = { normal:'badge-normal', rest:'', abnormal:'badge-late', leave:'badge-leave', travel:'badge-travel', absent:'badge-miss', overtime:'badge-early', suspect_ot:'badge-nosign', no_sign_in:'badge-nosign', no_sign_out:'badge-nosign' };
+      return m[s] || 'badge-miss';
+    },
+    statusColor(s) {
+      const m = { normal:'var(--jade)', abnormal:'var(--vermillion)', leave:'var(--indigo)', travel:'var(--sandal)', absent:'var(--vermillion)', overtime:'var(--gold)', suspect_ot:'var(--sandal)' };
+      return m[s] || 'var(--text-secondary)';
+    },
+    remarkText(r) {
+      const p = [];
+      if (r.leaveType) p.push(r.leaveType + (r.leaveHours ? r.leaveHours + 'h' : ''));
+      else if (r.sourceLeaveIds && r.sourceLeaveIds.length) p.push('请假');
+      if (r.travelHours > 0 || (r.sourceTravelIds && r.sourceTravelIds.length)) p.push('出差');
+      if (r.overtimeHours > 0 && r.status !== 'leave' && r.status !== 'travel') p.push('加班' + r.overtimeHours + 'h');
+      else if (r.status === 'overtime') p.push('疑似加班' + (r.overtimeHours ? r.overtimeHours + 'h' : ''));
+      else if (r.sourceOvertimeIds && r.sourceOvertimeIds.length) p.push('有加班');
+      if (r.status === 'suspect_ot') p.push('疑似加班');
+      if (r.sourceMissIds && r.sourceMissIds.length) p.push('补卡');
+      if (r.absent) p.push('缺勤');
+      return p.join('/');
+    },
+    async detectDataMonth() {
+      const punches = await Store.getAll('punch_records');
+      if (!punches.length) {
+        const now = new Date();
+        return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+      }
+      const dates = punches.map(p => { const m = (p.date || '').match(/^(\d{4})-(\d{2})/); return m ? m[1] + '-' + m[2] : null; }).filter(Boolean).sort();
+      return dates[dates.length - 1];
+    },
+    async loadResults() {
+      this.results = await RulesEngine.getMonthResults(this.currentMonth);
+      if (!this.results.length) {
+        const punches = await Store.getAll('punch_records');
+        if (punches.some(p => p.date && p.date.startsWith(this.currentMonth))) await this.runCalculation();
+      } else {
+        const configEntry = await Store.getByKey('settings', 'config_updated_at');
+        if (configEntry && configEntry.value) {
+          const calcTime = await Store.getByKey('settings', 'last_calc_' + this.currentMonth);
+          if (!calcTime || calcTime.value < configEntry.value) this.configChanged = true;
+        }
+        const rvEntry = await Store.getByKey('settings', 'rules_version');
+        if (!rvEntry || rvEntry.value !== RULES_VERSION) {
+          await Store.put('settings', { key: 'rules_version', value: RULES_VERSION });
+          await this.runCalculation();
+          return;
+        }
+      }
+      const [y, m] = this.currentMonth.split('-').map(Number);
+      const allSchedules = await Store.getAll('schedules');
+      const sc = (allSchedules || []).filter(s => s.year === y && s.month === m).length;
+      this.scheduleMissing = sc === 0 && this.results.length > 0;
+      const holidays = await Store.getAll('holidays');
+      this.holidayMap = {};
+      for (const h of holidays) { if (h.date && h.date.startsWith(this.currentMonth)) this.holidayMap[h.date] = h; }
+      if (this.viewMode === 'calendar') await this.buildCalendar();
+      const es = new Map();
+      for (const r of this.results) { if (!es.has(r.employeeNo)) es.set(r.employeeNo, { employeeNo: r.employeeNo, name: r.name, department: r.department }); }
+      this.calendarEmployees = [...es.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      const ds = new Set(this.results.map(r => r.department).filter(Boolean));
+      this.departments = [...ds].sort();
+    },
+    async runCalculation() {
+      this.calculating = true;
+      this.configChanged = false;
+      try {
+        await RulesEngine.calculateMonth(this.currentMonth);
+        await Store.put('settings', { key: 'last_calc_' + this.currentMonth, value: Date.now() });
+        await this.loadResults();
+      } catch (err) {
+        alert('计算出错: ' + err.message);
+      }
+      this.calculating = false;
+    },
+    async buildCalendar() {
+      const [y, m] = this.currentMonth.split('-').map(Number);
+      const firstDay = new Date(y, m - 1, 1);
+      const lastDate = new Date(y, m, 0).getDate();
+      const startDow = firstDay.getDay() || 7;
+      const cells = [];
+      let scheduleMap = {};
+      if (this.calEmployee) {
+        const allSchedules = await Store.getByIndex('schedules', 'year', y);
+        for (const s of allSchedules) { if (s.month === m && s.employeeNo === this.calEmployee) { scheduleMap[this.calEmployee] = s; break; } }
+      } else {
+        const allSchedules = await Store.getByIndex('schedules', 'year', y);
+        for (const s of allSchedules) { if (s.month === m && !scheduleMap[s.employeeNo]) scheduleMap[s.employeeNo] = s; }
+      }
+      const holidays = await Store.getAll('holidays');
+      const holidayMap = {};
+      for (const h of holidays) { if (h.date && h.date.startsWith(this.currentMonth)) holidayMap[h.date] = h; }
+      for (let i = 1; i < startDow; i++) cells.push({ key: 'prev-' + i, day: '', isRest: false, record: null, statusClass: 'cal-unknown' });
+      for (let d = 1; d <= lastDate; d++) {
+        const ds = this.currentMonth + '-' + String(d).padStart(2, '0');
+        const dayRecords = this.results.filter(r => { if (this.calEmployee && r.employeeNo !== this.calEmployee) return false; return r.date === ds; });
+        const dayStr = String(d).padStart(2, '0');
+        let isRest = false, holidayName = null;
+        const h = holidayMap[ds];
+        if (h) { isRest = !h.isWorkday; holidayName = h.name; }
+        else if (this.calEmployee) { const sch = scheduleMap[this.calEmployee]; if (sch && sch.workDays) isRest = sch.workDays[dayStr] !== true; }
+        else { let allRest = true, hasSched = false; const enos = [...new Set(this.results.map(r => r.employeeNo))]; for (const eno of enos) { const sch = scheduleMap[eno]; if (sch && sch.workDays) { hasSched = true; if (sch.workDays[dayStr]) allRest = false; } } isRest = hasSched && allRest; }
+        let sc = 'cal-unknown';
+        const fr = dayRecords[0];
+        if (fr) { if (fr.status === 'normal') sc = 'cal-normal'; else if (fr.status === 'rest') sc = 'cal-rest'; else if (fr.status === 'abnormal') sc = 'cal-abnormal'; else if (fr.status === 'no_sign_in' || fr.status === 'no_sign_out') sc = 'cal-abnormal'; else if (fr.status === 'leave') sc = 'cal-leave'; else if (fr.status === 'travel') sc = 'cal-travel'; else if (fr.status === 'absent') sc = 'cal-absent'; else if (fr.status === 'overtime') sc = 'cal-overtime'; else if (fr.status === 'suspect_ot') sc = 'cal-unknown'; }
+        else if (holidayName) sc = 'cal-holiday';
+        else if (isRest) sc = 'cal-rest';
+        cells.push({ key: ds, day: d, isRest, record: fr || null, statusClass: sc, holidayName });
+      }
+      this.calendarCells = cells;
+    },
+    async showDetail(r) {
+      this.detail = await RulesEngine.getResultDetail(r.employeeNo, r.date);
+    },
+    handleLogout() { Auth.logout(); }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

@@ -14,7 +14,9 @@ COPY version.py version_stub.py
 
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
-RUN echo "GIT_SHA = '${GIT_SHA}'" > version.py && \
+ARG APP_VERSION=2.0.0
+RUN echo "APP_VERSION = '${APP_VERSION}'" > version.py && \
+    echo "GIT_SHA = '${GIT_SHA}'" >> version.py && \
     echo "BUILD_TIME = '${BUILD_TIME}'" >> version.py
 
 EXPOSE 8000

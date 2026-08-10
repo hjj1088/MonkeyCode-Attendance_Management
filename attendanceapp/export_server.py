@@ -19,7 +19,7 @@ from openpyxl.formatting.rule import FormulaRule
 from openpyxl.utils import get_column_letter
 
 try:
-    from version import GIT_SHA, BUILD_TIME        # Overwritten at Docker build time
+    from version import APP_VERSION, GIT_SHA, BUILD_TIME        # Overwritten at Docker build time
 except ImportError:
     GIT_SHA = 'N/A'
     BUILD_TIME = 'N/A'
@@ -465,6 +465,7 @@ class ExportHandler(http.server.SimpleHTTPRequestHandler):
         info = {
             'status': 'ok',
             'service': 'attendance-export-server',
+            'app_version': APP_VERSION,
             'version': GIT_SHA,
             'build_time': BUILD_TIME,
             'python': platform.python_version(),
