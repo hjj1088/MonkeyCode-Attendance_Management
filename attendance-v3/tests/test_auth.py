@@ -52,41 +52,34 @@ def test_jwt_invalid_token():
     assert verify_token(None) is None
 
 
-@pytest.mark.skip(reason='V3.2 multi-role: users table not implemented in V3.1')
-def test_create_user():
-    pass
-
-
-@pytest.mark.skip(reason='V3.2 multi-role: users table not implemented in V3.1')
-def test_create_duplicate_username_fails():
-    pass
-
-
-@pytest.mark.skip(reason='V3.2 multi-role: users table not implemented in V3.1')
-def test_get_all_users():
-    pass
-
-
-@pytest.mark.skip(reason='V3.2 multi-role: users table not implemented in V3.1')
-def test_update_user():
-    pass
-
-
-@pytest.mark.skip(reason='V3.2 multi-role: users table not implemented in V3.1')
-def test_set_user_enabled():
-    pass
-
-
-@pytest.mark.skip(reason='V3.2 multi-role: users table not implemented in V3.1')
-def test_increment_login_attempt_locks_after_5():
-    pass
-
-
-@pytest.mark.skip(reason='V3.2 multi-role: users table not implemented in V3.1')
-def test_reset_login_attempts():
-    pass
-
-
-@pytest.mark.skip(reason='V3.2 multi-role: users table not implemented in V3.1')
 def test_ensure_admin_user():
-    pass
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server', 'handlers'))
+    import handlers.auth as auth_mod
+
+    conn = database.get_db()
+    conn.execute("DELETE FROM users WHERE username='admin'")
+    conn.commit()
+    conn.close()
+
+    auth_mod.ensure_admin_user()
+
+    conn = database.get_db()
+    user = database.get_user_by_username(conn, 'admin')
+    conn.close()
+    assert user is not None
+    assert user['role'] == 'hradmin'
+    assert bcrypt.checkpw('admin123'.encode(), user['password_hash'].encode())
+
+
+def test_ensure_admin_user_idempotent():
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server', 'handlers'))
+    import handlers.auth as auth_mod
+
+    auth_mod.ensure_admin_user()
+    auth_mod.ensure_admin_user()
+
+    conn = database.get_db()
+    user = database.get_user_by_username(conn, 'admin')
+    conn.close()
+    assert user is not None
+    assert user['role'] == 'hradmin'

@@ -173,6 +173,28 @@ def init_db():
             name TEXT NOT NULL DEFAULT '',
             department TEXT NOT NULL DEFAULT ''
         );
+
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL DEFAULT '',
+            department TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT 'employee',
+            password_hash TEXT NOT NULL DEFAULT '',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            login_attempts INTEGER NOT NULL DEFAULT 0,
+            locked_until TEXT,
+            created_at TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS operation_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL DEFAULT '',
+            action TEXT NOT NULL DEFAULT '',
+            detail TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT ''
+        );
     """)
 
     # Create indices matching V2.0 IndexedDB indexes
@@ -203,6 +225,9 @@ def init_db():
 
     # Init default settings (matching V2.0 initDefaultSettings)
     _init_settings(conn)
+
+    # Init system config defaults (V3.2)
+    init_system(conn)
 
     conn.commit()
     conn.close()
@@ -259,3 +284,158 @@ def _init_settings(conn):
             "INSERT INTO export_templates (name, isDefault, fields) VALUES ('默认模板', 1, ?)",
             (fields,)
         )
+
+
+def create_user(conn, username, password_hash, name, department, role='employee'):
+    from datetime import datetime
+    now = datetime.now().isoformat(timespec='seconds')
+    cur = conn.execute(
+        "INSERT INTO users (username, password_hash, name, department, role, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (username, password_hash, name, department, role, now, now)
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_user_by_username(conn, username):
+    row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_user_by_id(conn, user_id):
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_all_users(conn):
+    return [dict(r) for r in conn.execute(
+        "SELECT id, username, name, department, role, enabled, login_attempts, locked_until, created_at "
+        "FROM users ORDER BY id"
+    ).fetchall()]
+
+
+def update_user(conn, user_id, fields):
+    from datetime import datetime
+    if not fields:
+        return 0
+    fields = dict(fields)
+    fields['updated_at'] = datetime.now().isoformat(timespec='seconds')
+    sets = ', '.join('{} = ?'.format(k) for k in fields)
+    cur = conn.execute(
+        "UPDATE users SET {} WHERE id = ?".format(sets),
+        list(fields.values()) + [user_id]
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def set_user_enabled(conn, user_id, enabled):
+    return update_user(conn, user_id, {'enabled': 1 if enabled else 0})
+
+
+def increment_login_attempt(conn, user_id):
+    from datetime import datetime, timedelta
+    conn.execute(
+        "UPDATE users SET login_attempts = login_attempts + 1 WHERE id = ?", (user_id,)
+    )
+    row = conn.execute("SELECT login_attempts FROM users WHERE id = ?", (user_id,)).fetchone()
+    attempts = row['login_attempts'] if row else 0
+    if attempts >= 5:
+        locked_until = (datetime.now() + timedelta(minutes=30)).isoformat(timespec='seconds')
+        conn.execute(
+            "UPDATE users SET locked_until = ? WHERE id = ?", (locked_until, user_id)
+        )
+    conn.commit()
+    return {'login_attempts': attempts}
+
+
+def reset_login_attempts(conn, user_id):
+    conn.execute(
+        "UPDATE users SET login_attempts = 0, locked_until = NULL WHERE id = ?", (user_id,)
+    )
+    conn.commit()
+
+
+def clear_locked_if_expired(conn, user_id):
+    from datetime import datetime
+    row = conn.execute("SELECT locked_until FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row or not row['locked_until']:
+        return
+    try:
+        if datetime.fromisoformat(row['locked_until']) <= datetime.now():
+            reset_login_attempts(conn, user_id)
+    except ValueError:
+        reset_login_attempts(conn, user_id)
+
+
+def log_operation(conn, username, action, detail=''):
+    from datetime import datetime
+    conn.execute(
+        "INSERT INTO operation_logs (username, action, detail, created_at) VALUES (?, ?, ?, ?)",
+        (username or '', action or '', detail or '', datetime.now().isoformat(timespec='seconds'))
+    )
+    conn.commit()
+
+
+def init_system(conn):
+    """First-boot system config defaults (V3.2). Reuses attendance_config from _init_settings."""
+    defaults = {
+        'company_name': '考勤管理系统',
+        'data_retention_days': '365',
+    }
+    for key, value in defaults.items():
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        if not row:
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?)",
+                (key, value)
+            )
+    conn.commit()
+
+
+JSON_FIELDS = frozenset({
+    'workDays', 'fields', 'sourcePunchIds', 'sourceLeaveIds',
+    'sourceTravelIds', 'sourceMissIds', 'sourceOvertimeIds', 'value',
+})
+BOOL_FIELDS = frozenset({'isWorkday', 'isHoliday', 'isDefault', 'absent', 'isRestDay', 'enabled'})
+
+
+def serialize_record(record):
+    """Convert a camelCase record into SQLite-storable values (JSON dump + bool→0/1)."""
+    clean = {}
+    for k, v in record.items():
+        if k in JSON_FIELDS:
+            clean[k] = json.dumps(v, ensure_ascii=False) if not isinstance(v, str) else v
+        elif isinstance(v, bool) or k in BOOL_FIELDS and v in (0, 1, None):
+            clean[k] = 1 if v else 0
+        else:
+            clean[k] = v
+    return clean
+
+
+def insert_records(conn, table, records):
+    """Generic bulk insert. Skips `id`; JSON/bool fields serialized. Returns inserted count."""
+    count = 0
+    for record in records:
+        clean = serialize_record(record)
+        if table == 'settings':
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                (clean.get('key', ''), clean.get('value', ''))
+            )
+        else:
+            clean.pop('id', None)
+            cols = ', '.join('"{}"'.format(k) for k in clean.keys())
+            placeholders = ', '.join(['?'] * len(clean))
+            conn.execute(
+                'INSERT INTO {} ({}) VALUES ({})'.format(table, cols, placeholders),
+                list(clean.values())
+            )
+        count += 1
+    return count
+
+
+def clear_table(conn, table):
+    conn.execute('DELETE FROM {}'.format(table))
+    conn.commit()

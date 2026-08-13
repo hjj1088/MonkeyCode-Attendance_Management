@@ -1,226 +1,106 @@
-# 需求实施计划 -- V3.0 多角色考勤管理系统
+# 需求实施计划 -- V3.2 多角色考勤管理系统（真实完成度版）
 
 - 对应设计: `.monkeycode/specs/phase2-multi-role-system/design.md`
 - 对应需求: `.monkeycode/specs/phase2-multi-role-system/requirements.md`
+- 复刻依据: `.monkeycode/specs/phase2-multi-role-system/v31-replica-reference.md`
+- 本清单按**实际完成度**重制，取代旧版失真勾选。勾选状态以代码核实为准。
+
+> 已确认决策：
+> 1. V3.2 业务表沿用 V3.1 **camelCase** schema（不按 design.md 的 snake_case）
+> 2. V3.2 前端新建 Vite + Vue3 SPA（`client/src`），但 V3.1 功能逻辑已完整整理到 `v31-replica-reference.md`，复刻不丢失功能
 
 ---
 
-- [x] 1. 项目骨架创建与基础环境 [R5, R8]
-  - 使用 `npm create vite@latest` 初始化 Vue 3 前端项目，JavaScript + Options API 模式
-  - 安装依赖：`vue-router`, `xlsx`
-  - 安装 devDependencies：`@vitejs/plugin-vue`, `vite`
-  - 创建 `client/vite.config.js`，配置开发代理 `/api` → `http://127.0.0.1:8001`，配置 `allowedHosts: ['.monkeycode-ai.online']`
-  - 创建 `client/index.html` 入口文件
-  - 创建 `server/server.py` 主入口文件，继承 `http.server.BaseHTTPRequestHandler`
-  - 创建 `server/database.py`，实现 `get_db()` 连接函数和 `init_tables()` 建表函数（CREATE TABLE IF NOT EXISTS）
-  - 创建 `server/middleware.py`，实现 `_send_json()` 统一响应、`_read_body()` 请求体解析、CORS 头
-  - 创建 `requirements.txt`：`openpyxl==3.1.5`, `PyJWT==2.8.0`, `bcrypt==4.1.2`
-  - 创建 `server/data/.gitkeep`，确保 data 目录存在
-  - 创建 `client/src/main.js` 挂载 Vue 应用，引入 router 并 mount 到 `#app`
-  - 创建 `client/src/App.vue` 根组件，包含 `<router-view />` 占位
-  - 创建 `client/src/router/index.js`，定义所有路由表的骨架
-  - 创建 `client/src/shared/api.js`，封装 `fetch` 请求函数（自动附加 Bearer token，401 自动跳转登录）
-  - 从 `attendanceapp/shared/bigsur.css` 复制到 `client/src/assets/bigsur.css`
-  - 在 `App.vue` 中全局引入 `bigsur.css`
-  - [x] 1.1 编写项目初始化验证测试
-    - 验证 `db.get_db()` 返回可用连接
-    - 验证 `db.init_tables()` 创建所有15张表
+## 阶段 A：后端数据层（database.py）
 
-- [x] 2. 认证体系：users 表 + bcrypt + JWT + 登录页 [R1, R6]
-  - 在 `database.py` 的 `init_tables()` 中创建 users 表
-  - 在 `database.py` 中实现用户 CRUD 函数：`create_user()`, `get_user_by_username()`, `get_user_by_id()`, `get_all_users()`, `update_user()`, `set_user_enabled()`, `increment_login_attempt()`, `reset_login_attempts()`
-  - 在 `middleware.py` 中实现 `generate_token()` 和 `verify_token()`，24小时过期，使用 HS256
-  - 在 `middleware.py` 中实现 `require_role(*roles)` 装饰器
-  - 创建 `server/handlers/auth.py`，实现 `handle_login()`：校验用户名/密码/bcrypt → 失败计数锁定 → 成功返回 JWT
-  - 创建 `server/handlers/auth.py`，实现 `handle_change_password()`：验证 token + 原密码 → 更新 bcrypt 哈希
-  - 创建 `server/handlers/auth.py`，实现 `ensure_admin_user()`：首次启动自动创建 admin（密码 admin123）和 hradmin 角色
-  - 在 `server.py` 中注册 auth 路由
-  - 创建 `client/src/views/LoginView.vue`，登录表单（用户名/密码），居中卡片布局
-  - 创建 `client/src/components/AppSidebar.vue`，根据 token 中的 role 动态渲染菜单项（业务区 + 系统区两组）
-  - 创建 `client/src/App.vue` 完整布局：左侧 AppSidebar + 右侧 `<router-view />`，登录页隐藏侧边栏
-  - 实现 `router/index.js` 的 `beforeEach` 守卫：无 token 跳转登录、role 校验跳转默认页
-  - [x] 2.1 编写认证模块单元测试
-    - 测试 bcrypt 密码哈希和校验
-    - 测试 JWT token 生成和验证（包括过期 token）
-    - 测试 5 次登录失败锁定逻辑
+- [x] A1. users 与 operation_logs 表 + 用户 CRUD 函数 [R1, R6]
+  - [x] 在 `database.py` `init_db()` 中新增 `users` 表：`id, username, name, department, role, password_hash, enabled, login_attempts, locked_until, created_at, updated_at`（camelCase，与 V3.1 风格一致）
+  - [x] 新增 `operation_logs` 表：`id, username, action, detail, created_at`
+  - [x] 实现 `create_user(username, password_hash, name, department, role)`（用户名唯一）
+  - [x] 实现 `get_user_by_username(username)` / `get_user_by_id(id)` / `get_all_users()`
+  - [x] 实现 `update_user(id, fields)` / `set_user_enabled(id, enabled)`
+  - [x] 实现 `increment_login_attempt(username)` / `reset_login_attempts(username)` / `clear_locked_if_expired(username)`
+  - [x] 实现 `log_operation(username, action, detail)` 写 operation_logs
+  - [x] A1.1 单元测试：`test/db/test_users.py`（创建/唯一性/启禁用/锁定计数）→ tests/test_users.py 9 PASS
 
-- [x] 3. 系统初始化与管理员安全配置 [R1-7, R9]
-  - 在 `database.py` 中实现 `init_system()` 函数，首次启动时写入 settings 表默认值（公司名称、数据保留天数）
-  - 在 `handlers/auth.py` 中实现首次登录默认密码检测：admin 使用默认密码 admin123 登录时 → 返回 `need_change_password: true` 标记
-  - 在 `LoginView.vue` 登录成功后检测 `need_change_password` → 跳转到首次改密引导页
-  - 创建 `client/src/views/SetupWizardView.vue`，首次改密引导页：强制修改管理员密码（需验证新密码两次一致）
-  - 创建 `server/handlers/system.py`，实现系统级 API：
-    - `GET /api/system/status` — 系统状态：数据库文件大小、各表记录数、服务启动时间、版本号（hradmin）
-    - `GET /api/system/check-default-password` — 检查 admin 是否为默认密码（hradmin）
-    - `PUT /api/system/admin-password` — 修改 admin 管理员密码（hradmin，需验证当前密码）
-  - 创建 `client/src/views/SettingsView.vue`，系统设置页面，包含 Tab 切换：
-    - Tab "常规配置"：公司名称、数据保留天数
-    - Tab "管理员密码"：修改 admin 管理员密码（当前密码 + 新密码 + 确认新密码）
-    - Tab "系统状态"：数据库文件大小、各表记录数统计、服务运行时间、版本号
-    - Tab "数据管理"：生成测试数据 / 清空业务数据（二次确认）/ 当前各表数据条数一览
-  - 在 `server.py` 启动流程中调用 `init_system()`，初始化默认配置并确保 admin 账号存在
-  - 在 `AppSidebar.vue` 侧边栏系统区菜单中添加"系统设置"入口
-  - [x] 3.1 编写系统初始化单元测试
-    - 测试 `init_system()` 默认值写入 settings 表
-    - 测试默认密码检测接口返回正确标记
-    - 测试修改 admin 密码后旧密码失效
+- [x] A2. 系统初始化函数 [R1-7, R9]
+  - [x] 实现 `init_system()`：首次启动写 settings 默认值（company_name + data_retention_days + 复用 attendance_config）
+  - [x] 实现 `ensure_admin_user()`：首次启动创建 admin（bcrypt admin123）+ hradmin 角色（handlers/auth.py 现有，已验证）
+  - [x] A2.1 单元测试：默认配置写入 + admin 账号自动创建（幂等）→ tests/test_auth.py + test_users.py 通过
 
-- [ ] 4. 检查点 - 认证+系统初始化完整可用
-  - 验证完整链路：启动 → admin 登录 → 检测默认密码 → 强制改密 → 进入系统设置页 → 各 Tab 功能可访问
+- [x] A3. 泛型表操作函数 [R3, R5]
+  - [x] 实现 `serialize_record()`（JSON 字段 dump + bool→0/1）+ `insert_records(table, records)` 泛型批量插入（复用 V3.1 序列化语义）
+  - [x] 实现 `clear_table(table)` 清空函数
+  - [x] A3.1 单元测试：插入/清空/JSON 序列化往返 → tests/test_generic_ops.py 4 PASS
 
-- [x] 5. 考勤规则配置：RulesSettingsView + 假期管理 [R3, R5]
-  - 创建 `server/handlers/rules.py`，实现考勤规则配置 API：
-    - `GET /api/rules/config` — 获取当前考勤规则（hradmin）
-    - `PUT /api/rules/config` — 更新考勤规则（hradmin）：上班时间（08:30）、下班时间（17:30）、迟到阈值（分钟）、早退阈值（分钟）
-    - `GET /api/rules/tolerance` — 获取容错规则（hradmin）
-    - `PUT /api/rules/tolerance` — 更新容错规则：每月豁免次数（默认2次）、累计豁免时长（默认30分钟）
-  - 创建 `server/handlers/rules.py`，实现假期管理 API：
-    - `GET /api/rules/holidays` — 获取假期列表（hradmin，支持年份筛选）
-    - `POST /api/rules/holidays` — 批量添加假期：开始日期 + 结束日期 + 名称 + 类型（休息日/调休上班日），自动展开日期范围写入 holidays 表
-    - `DELETE /api/rules/holidays/<id>` — 删除单条假期记录（hradmin）
-  - 完善 `client/src/views/RulesSettingsView.vue`，考勤规则设置页面，包含 Tab 切换：
-    - Tab "考勤时段"：上班时间、下班时间、迟到阈值（分钟）、早退阈值（分钟），保存按钮
-    - Tab "容错规则"：每月豁免次数、累计豁免时长（分钟），保存按钮
-    - Tab "假期管理"：添加假期表单（开始日期、结束日期、名称、类型下拉）+ 假期列表表格（含日期、名称、类型标签、删除按钮）
-  - 在 `server.py` 中注册 rules 路由
-  - [x] 5.1 编写考勤规则配置单元测试
-    - 测试规则配置的 CRUD 操作
-    - 测试假期批量添加日期范围展开正确
-    - 测试假期删除
+## 阶段 B：后端路由挂载（server.py + middleware.py）
 
-- [x] 6. 用户管理：CRUD + UserManageView [R1, R6]
-  - 创建 `server/handlers/users.py`，实现用户管理 API：
-    - `GET /api/users` — 用户列表，返回 id/username/name/department/role/enabled（hradmin）
-    - `POST /api/users` — 创建用户：用户名唯一校验 → bcrypt 加密初始密码 → 写入 users 表（hradmin）
-    - `PUT /api/users/<id>` — 编辑用户姓名/部门/角色（hradmin）
-    - `PATCH /api/users/<id>/status` — 启用/禁用用户，记录 operation_logs（hradmin）
-    - `POST /api/users/reset-password` — 重置用户密码（hradmin，生成随机密码或指定新密码）
-  - 在 `server.py` 中注册 users 路由
-  - 完善 `client/src/views/UserManageView.vue`：
-    - 用户列表表格（姓名、部门、角色标签、账号状态开关）
-    - 新增用户弹窗（用户名、姓名、部门、角色下拉、初始密码）
-    - 编辑用户弹窗（姓名、部门、角色）
-    - 启用/禁用开关（二次确认）
-    - 重置密码按钮
-  - [ ]* 6.1 编写用户管理单元测试
-    - 测试创建重复用户名被拒绝
-    - 测试禁用用户后登录失败
+- [ ] B1. 认证与用户路由 [R1, R6]
+  - [ ] 复用现有 `middleware.py`（generate_token/verify_token/require_role/_send_json 已完整）
+  - [ ] 完成 `handlers/auth.py`：`POST /api/auth/login`（bcrypt 校验 + 失败锁定 5 次 + 返回 JWT + `need_change_password` 标记）、`POST /api/auth/change-password`、`GET /api/auth/login-check`
+  - [ ] 完成 `handlers/users.py`：`GET/POST /api/users`、`PUT /api/users/<id>`、`PATCH /api/users/<id>/status`、`POST /api/users/reset-password`
+  - [ ] 在 `server.py` 注册 auth/users 路由
+  - [ ] B1.1 集成测试：登录/锁定/改密/用户 CRUD（对接 SQLite，非 mock）
 
-- [x] 7. 数据导入：6 类数据表 + ImportView [R3, R5]
-  - 在 `database.py` 中实现 `insert_records(table, records)` 泛型批量插入和 `clear_table(table)` 清空函数
-  - 创建 `server/handlers/attendance.py`，实现 `POST /api/attendance/import`：接收 JSON 批量写入对应 SQLite 表
-  - 从 `attendanceapp/shared/excel.js` 复制到 `client/src/shared/excel.js`：
-    - 改为 ES Module export
-    - 保留 6 种文件类型识别逻辑（打卡/请假/加班/出差/漏打卡/排班）
-    - 保留日期格式统一、时间格式统一、出差日期范围拆分
-    - 保留排班解析（Sheet命名识别、年份提取、列映射、休息日颜色识别）
-    - 移除所有 IndexedDB 读写（`Store.*` / `DB.*`），改为纯解析工具函数
-  - 从 `attendanceapp/shared/matcher.js` 复制到 `client/src/shared/matcher.js`：
-    - 改为 ES Module export，接收数据数组作为参数，不再依赖 IndexedDB
-    - 保留员工名册匹配逻辑
-  - 创建 `client/src/views/ImportView.vue`，完整数据导入页面：
-    - 拖拽上传区域（支持 .xlsx/.xls 多文件）
-    - 上传文件列表（显示文件名、类型标签、解析记录数）
-    - 文件预览弹窗（每种类型展示前 10 条数据表格）
-    - 去重逻辑（同名文件不重复添加，已入库文件跳过）
-    - "全部入库"按钮 → 调用 `POST /api/attendance/import` 写入服务端
-    - 导入日志时间线（实时显示每条导入：时间、类型、文件名、入库条数、状态）
-  - [ ]* 7.1 编写导入功能集成测试
-    - 测试上传打卡 Excel → 解析正确 → API 写入成功 → 查询确认
+- [ ] B2. 系统/规则/考勤/导出路由 [R3, R5, R8]
+  - [ ] 完成 `handlers/system.py`：`GET /api/system/status`、`GET /api/system/check-default-password`、`PUT /api/system/admin-password`、`POST /api/system/seed-test-data`、`POST /api/system/reset-data`、`GET /api/system/version`
+  - [ ] 完成 `handlers/rules.py`：`GET/PUT /api/rules/config`、`GET/PUT /api/rules/tolerance`、`GET/POST /api/rules/holidays`、`DELETE /api/rules/holidays/<id>`
+  - [ ] 完成 `handlers/attendance.py`：`POST /api/attendance/import`、`GET /api/attendance/my|dept|all`、`POST /api/attendance/calculate`
+  - [ ] 完成 `handlers/export.py`：`POST /api/export/flat`、`POST /api/export/calendar`（迁移 export_server.py，保留条件格式）
+  - [ ] 在 `server.py` 注册全部路由（保留 V3.1 的 `/api/store/*` 兼容路由）
+  - [ ] B2.1 集成测试：路由可达 + 角色鉴权（无 token 401 / 低角色 403）
 
-- [x] 8. 测试数据管理：一键生成 + 清空 [R3, R9]
-  - 创建 `server/handlers/system.py` 中实现 `POST /api/system/seed-test-data`（hradmin）：
-    - 创建 3 个测试部门（技术部、销售部、行政部）+ 各 5 个测试员工账号（密码统一 test123）
-    - 创建 2 个 deptadmin 测试账号（技术部管理员、销售部管理员）
-    - 为当月生成模拟数据：每人 20 个工作日打卡记录 + 2 条请假 + 1 条加班 + 排班数据
-  - 创建 `server/handlers/system.py` 中实现 `POST /api/system/reset-data`（hradmin）：
-    - 清空 7 张业务表（punch/leave/overtime/travel/miss_punch/schedules/attendance_results）
-    - 保留 users、settings、holidays、export_templates、carry_over
-    - 需二次确认，返回清空报告
-  - SettingsView 的"数据管理" Tab 中集成 seed 和 reset 按钮 + 各表行数实时统计
-  - [ ]* 8.1 编写数据初始化集成测试
-    - 测试 seed 后各表有预期数量的记录
-    - 测试 reset 后业务表清空但 users/settings 保留
+## 阶段 C：前端 Vite SPA（client/src，全新重建）
 
-- [x] 9. 考勤计算：rules.js 迁移 + 计算引擎 + 双视图 [R3, R5]
-  - 从 `attendanceapp/shared/rules.js` 复制规则引擎到 `client/src/shared/rules.js`，改为 ES Module export
-  - 修改 `rules.js`：所有数据获取调用改为通过 `api.js` 调用后端 API（读取打卡/请假/出差/漏打卡/排班/假期/规则配置）
-  - 保留完整判定逻辑：迟到/早退/缺勤/休息/请假/出差/加班/未打卡判定 + 容错豁免 + 加班调休结余
-  - 在 `server/handlers/attendance.py` 中实现考勤数据 API：
-    - `GET /api/attendance/my` — 本人当月结果（employee+，按 department 自动过滤）
-    - `GET /api/attendance/dept` — 本部门结果（deptadmin+，自动限定 department）
-    - `GET /api/attendance/all` — 全公司结果（hradmin，支持 department/month/status 查询参数筛选）
-    - `POST /api/attendance/calculate` — 接收前端计算结果 → upsert 到 attendance_results 表
-  - 创建 `client/src/components/AttendanceTable.vue`：列表视图组件
-    - 表格列：考勤号、姓名、部门、日期、排班、签到、签退、迟到(min)、早退(min)、加班(h)、状态标签（颜色徽标）
-    - 月份选择器、部门筛选、状态筛选、姓名搜索
-    - 点击行弹出详情弹窗（展示关联的打卡/请假/出差/漏打卡/加班记录）
-  - 创建 `client/src/components/AttendanceCalendar.vue`：日历视图组件
-    - 7列月历网格（周一至周日），9 种状态颜色编码
-    - 员工下拉筛选
-    - 日期格内显示签到/签退时间、假日名称、异常标签
-    - 点击有数据单元格弹详情
-  - 完善 `client/src/views/MyAttendanceView.vue`：个人考勤页，列表/日历切换 + 申诉按钮（标记 disputed）
-  - 完善 `client/src/views/AttendanceView.vue`：考勤管理页
-    - deptadmin → 自动显示本部门数据
-    - hradmin → 显示全公司数据 + 部门/月份/状态筛选
-    - 含"重新计算"按钮、规则版本检测
-  - [ ]* 9.1 编写考勤计算单元测试
-    - 测试给定打卡+排班+请假 → 正常出勤状态
-    - 测试容错规则豁免逻辑（月累计2次且≤30min）
-    - 测试加班结余计算正确性
+> 复刻基线：`v31-replica-reference.md` 逐页行为必须保留。
 
-- [ ] 10. 检查点 - 考勤计算和视图功能完整可用
-  - 使用 seed 测试数据 → 导入 → 计算 → 验证列表视图 + 日历视图显示正确
+- [ ] C1. 项目骨架 + 基础设施 [R5, R8]
+  - [ ] 初始化 `client/vite.config.js`：dev 代理 `/api → http://127.0.0.1:8001` + `allowedHosts: ['.monkeycode-ai.online']`
+  - [ ] `client/src/main.js` / `App.vue`（含 AppSidebar + `<router-view />`，登录页隐藏侧栏）
+  - [ ] `client/src/router/index.js`：路由表 + `beforeEach` 守卫（无 token→登录、role 校验→默认页）
+  - [ ] `client/src/shared/api.js`：fetch 封装（Bearer token、401 清 token 跳登录）——复刻 api-store.js 的 401 语义
+  - [ ] `client/src/shared/store.js`：Store 接口（getAll/getByKey/getByIndex/getByRange/put/bulkPut/deleteByKey/clearTable/resetAllData）转调后端 `/api/store/*`
+  - [ ] 复制 bigsur.css 到 `client/src/assets/`
+  - [ ] C1.1 单元测试：api.js 401 跳转 + store.js 方法映射
 
-- [ ] 11. 工作流：review_status 四状态流转 [R4]
-  - 在 `server/handlers/attendance.py` 中实现工作流 API：
-    - `PATCH /api/attendance/<id>/review` — 确认/标记争议，记录 reviewed_by 和 reviewed_at（deptadmin+）
-    - `PATCH /api/attendance/dept/submit` — 批量提交部门当月数据 confirmed → submitted（deptadmin）
-    - `PATCH /api/attendance/lock` — 锁定指定月份整月数据 hradmin，阻止被锁定月份的修改和计算
-    - `GET /api/attendance/summary` — 汇总面板，各部门状态进度统计（hradmin）
-  - 创建 `client/src/components/ReviewPanel.vue`：确认/争议/提交/锁定操作面板
-  - 在 `AttendanceView.vue` 中集成 ReviewPanel，根据 review_status 显示操作按钮
-  - [ ]* 11.1 编写工作流单元测试
-    - 测试 pending → confirmed → submitted → locked 单向流转
-    - 测试 disputed → confirmed 申诉后重新确认
-    - 测试非管理员无法操作确认
-    - 测试锁定后阻止修改
+- [ ] C2. 共享逻辑迁移（ES Module 化）[R3, R5]
+  - [ ] `client/src/shared/excel.js`：复制 V3.1 并改 ES Module export；**移除 IndexedDB 读写**，保留 6 类识别/日期时间格式化/出差范围拆分/排班解析
+  - [ ] `client/src/shared/matcher.js`：ES Module 化，接收数据数组参数
+  - [ ] `client/src/shared/rules.js`：复制 V3.1 规则引擎（RULES_VERSION、9 状态判定优先级、容错豁免、加班调休结余、source*Ids），数据获取改走 store.js/后端 API
+  - [ ] C2.1 单元测试：excel 类型识别 + rules 状态判定（迟到/请假/缺勤/补卡豁免/容错豁免/结余）
 
-- [ ] 12. 导出中心：XLSX 平铺 + 日历报表 [R5, R8]
-  - 从 `attendanceapp/export_server.py` 迁移到 `server/handlers/export.py`：
-    - `build_calendar_report(results, schedules, holidays, fields)` — 日历矩阵格式
-    - `build_flat_report(records, template, startTime, endTime)` — 平铺格式
-    - 保留 CJK 列宽适配、条件格式（迟到/早退红色标记）、异常状态颜色标注
-  - 实现导出 API：
-    - `POST /api/export/flat` — 平铺报表（hradmin，接收 records + template + 时间范围）
-    - `POST /api/export/calendar` — 日历报表（hradmin，接收 results + schedules + holidays + fields）
-  - 创建 `client/src/views/ExportView.vue`，完整导出中心页面：
-    - 左侧模板面板：模板列表 + 切换 + "另存为模板"
-    - 模板字段编辑：18 个可选字段添加/删除/自定义列名/排序
-    - 右侧实时预览表格（前 5 条数据）
-    - 月份筛选 + 导出按钮（平铺格式 / 日历格式）
-  - [ ]* 12.1 编写导出功能集成测试
-    - 测试平铺导出包含正确字段和条件格式
-    - 测试日历导出按部门分组合并单元格正确
+- [ ] C3. 认证 + 设置视图 [R1, R6, R3]
+  - [ ] `views/LoginView.vue`：登录表单 + 错误提示 + 加载态 + 版本号；登录成功检测 `need_change_password` → 改密引导
+  - [ ] `views/SetupWizardView.vue`：首次改密（新密码两次一致校验）
+  - [ ] `views/SettingsView.vue`：Tab（常规配置/管理员密码/系统状态/数据管理 seed+reset+表行数）
+  - [ ] `views/RulesSettingsView.vue`：Tab（考勤时段/容错规则/假期管理批量展开+删除）——复刻 V3.1 settings.html 行为（保存写 config_updated_at）
 
-- [ ] 13. 数据迁移：V2.0 → V3.0 [R7]
-  - 创建 `server/handlers/system.py` 中实现 `POST /api/migrate`：
-    - 接收 V2.0 IndexedDB 导出的全量 JSON → 逐表写入 SQLite 对应表
-    - 保持员工编号、打卡记录、OA 记录的关联关系
-    - 事务回滚：任一步失败则回滚当前批次并记录错误
-    - 返回迁移报告（各表导入条数、跳过条数、错误列表）
-  - 完善 `client/src/views/MigrateView.vue`：
-    - 上传 V2.0 JSON 导出文件
-    - 预览迁移内容摘要（各表记录数）
-    - 执行迁移按钮 + 迁移进度 + 报告展示
-  - [ ]* 13.1 编写迁移集成测试
-    - 测试迁移后数据完整性（记录数一致、关联关系保留）
-    - 测试迁移失败时回滚
+- [ ] C4. 业务视图 [R3, R4, R5, R8]
+  - [ ] `views/ImportView.vue`：拖拽 + 多文件 + 类型徽标 + 预览前 10 条 + 去重 + 全部入库 + 导入日志；schedule 最后展开 + syncEmployees + config_updated_at
+  - [ ] `views/AttendanceView.vue` + `components/AttendanceTable.vue` + `components/AttendanceCalendar.vue`：复刻 attendance.html 双视图 + 详情弹窗 5 关联表 + 规则版本/config 变更提示 + 排班缺失提示 + 重新计算
+  - [ ] `views/MyAttendanceView.vue`：employee 个人考勤（my 接口）
+  - [ ] `views/ExportView.vue`：三列布局 + 模板管理 + 19 字段编辑 + 月份筛选 + 平铺/日历导出 + 实时预览
+  - [ ] `components/AppSidebar.vue`：按 role 动态渲染菜单（employee/deptadmin/hradmin）
 
-- [ ] 14. 最终检查点 - 完整业务链路验证
-  - 初始化系统 → 设置考勤规则 → 创建测试用户 → 导入考勤数据 → 计算 → 部门确认 → 提交汇总 → 人事锁定 → 导出报表
-  - 验证 employee 角色仅可见个人考勤
-  - 验证 deptadmin 角色仅可见本部门数据
-  - 验证 hradmin 角色可见全公司数据和管理功能
+## 阶段 D：检查点与补测试
 
+- [ ] D1. 检查点 - 认证 + 系统初始化
+  - [ ] 启动 → admin 登录 → 检测默认密码 → 强制改密 → 系统设置各 Tab 可用
+
+- [ ] D2. 检查点 - 考勤计算 + 视图
+  - [ ] seed 测试数据 → 导入 → 计算 → 列表 + 日历视图正确 → 详情弹窗关联正确
+
+- [ ] D3. 补测试（对应旧版失真勾选的 6.1/7.1/8.1/9.1/11.1/12.1/13.1，7 项）
+  - [ ] 用户管理：重复用户名拒绝 + 禁用后登录失败
+  - [ ] 导入：打卡 Excel 解析 → API 写入 → 查询确认
+  - [ ] 数据管理：seed 后各表数量 + reset 后业务表清空而 users/settings 保留
+  - [ ] 考勤计算：排班+请假→正常；容错豁免（月 2 次且 ≤30min）；结余正确性
+  - [ ] 工作流：pending→confirmed→submitted→locked 单向流转 + disputed→confirmed + 非管理员拒绝 + 锁定阻止修改
+  - [ ] 导出：平铺含正确字段与条件格式；日历按部门分组合并
+  - [ ] 迁移：V2.0 JSON 迁移后数据完整性 + 失败回滚
+
+## 收尾
+
+- [ ] 提交时排除 `*.db`、`__pycache__/`、`.vite/`、`.vscode/`、`attendanceapp/test_conditional_format.xlsx`
+- [ ] 用 project-wiki skill 同步文档
+- [ ] 启动前后端预览验证完整链路
