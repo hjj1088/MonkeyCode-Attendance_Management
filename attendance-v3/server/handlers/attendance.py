@@ -27,31 +27,30 @@ TABLE_MAP = {
 
 TABLE_COLUMNS = {
     'punch_records': [
-        'employee_no', 'name', 'department', 'date', 'period',
-        'sign_in', 'sign_out', 'late_minutes', 'early_minutes',
-        'absent', 'overtime_hours', 'work_hours', 'schedule_start', 'schedule_end',
-        'is_weekday', 'is_weekend', 'is_holiday', 'weekday_ot', 'weekend_ot', 'holiday_ot',
-        'customNo',
+        'employeeNo', 'customNo', 'name', 'department', 'date', 'period',
+        'scheduleStart', 'scheduleEnd', 'signIn', 'signOut',
+        'lateMinutes', 'earlyMinutes', 'absent', 'overtimeHours', 'workHours',
+        'isWeekday', 'isWeekend', 'isHoliday', 'weekdayOT', 'weekendOT', 'holidayOT',
     ],
     'leave_records': [
-        'applicant', 'department', 'leave_type', 'start_date',
-        'end_date', 'leave_days', 'leave_hours', 'reason',
+        'applicant', 'department', 'leaveType', 'startDate',
+        'endDate', 'leaveDays', 'leaveHours', 'reason',
     ],
     'overtime_records': [
-        'applicant', 'department', 'start_time', 'end_time',
-        'overtime_hours', 'content', 'start_end',
+        'applicant', 'department', 'startTime', 'endTime',
+        'overtimeHours', 'content',
     ],
     'travel_records': [
-        'applicant', 'department', 'start_date', 'end_date',
+        'applicant', 'department', 'startDate', 'endDate',
         'destination', 'reason', 'travelers', 'travelType',
     ],
     'miss_punch_records': [
-        'applicant', 'department', 'miss_date', 'miss_person',
-        'miss_time', 'card_time', 'reason',
+        'applicant', 'department', 'missDate', 'missPerson',
+        'missTime', 'cardTime', 'reason',
     ],
     'schedules': [
-        'employee_no', 'name', 'department', 'year', 'month',
-        'work_days',
+        'employeeNo', 'name', 'department', 'year', 'month',
+        'workDays',
     ],
 }
 
@@ -64,11 +63,11 @@ def _to_str(v):
 
 def _sync_employees(conn, punch_records):
     existing = set()
-    for row in conn.execute("SELECT employee_no FROM employees").fetchall():
-        existing.add(row['employee_no'])
+    for row in conn.execute("SELECT employeeNo FROM employees").fetchall():
+        existing.add(row['employeeNo'])
     seen = set()
     for r in punch_records:
-        no = _to_str(r.get('employee_no', r.get('employeeNo', '')))
+        no = _to_str(r.get('employeeNo', r.get('employee_no', '')))
         if not no or no in seen:
             continue
         seen.add(no)
@@ -76,12 +75,12 @@ def _sync_employees(conn, punch_records):
         dept = _to_str(r.get('department', ''))
         if no in existing:
             conn.execute(
-                "UPDATE employees SET name = ?, department = ? WHERE employee_no = ?",
+                "UPDATE employees SET name = ?, department = ? WHERE employeeNo = ?",
                 (name, dept, no)
             )
         else:
             conn.execute(
-                "INSERT OR IGNORE INTO employees (employee_no, name, department) VALUES (?, ?, ?)",
+                "INSERT OR IGNORE INTO employees (employeeNo, name, department) VALUES (?, ?, ?)",
                 (no, name, dept)
             )
 
@@ -119,7 +118,7 @@ def handle_import(handler):
     try:
         if file_name:
             existing_file = conn.execute(
-                "SELECT id FROM raw_files WHERE file_name = ?", (file_name,)
+                "SELECT id FROM raw_files WHERE fileName = ?", (file_name,)
             ).fetchone()
             if existing_file:
                 handler._send_json(0, data={'message': '文件已导入，跳过', 'imported': 0, 'total': len(records), 'type': file_type, 'skipped': True, 'errors': []})
@@ -129,7 +128,7 @@ def handle_import(handler):
             conn.execute("DELETE FROM punch_records")
 
         if file_type == 'schedule':
-            employees = conn.execute("SELECT employee_no, name, department FROM employees").fetchall()
+            employees = conn.execute("SELECT employeeNo, name, department FROM employees").fetchall()
             if not employees:
                 handler._send_json(400, message='请先导入打卡记录以建立员工名册')
                 return
@@ -145,13 +144,13 @@ def handle_import(handler):
                 work_days_json = json.dumps(work_days, ensure_ascii=False)
                 for emp in employees:
                     conn.execute(
-                        "INSERT INTO schedules (employee_no, name, department, year, month, work_days) VALUES (?, ?, ?, ?, ?, ?)",
-                        (emp['employee_no'], emp['name'], emp['department'], year, month, work_days_json)
+                        "INSERT INTO schedules (employeeNo, name, department, year, month, workDays) VALUES (?, ?, ?, ?, ?, ?)",
+                        (emp['employeeNo'], emp['name'], emp['department'], year, month, work_days_json)
                     )
                     imported += 1
 
             conn.execute(
-                "INSERT INTO raw_files (file_name, file_type, record_count, import_time) VALUES (?, ?, ?, datetime('now'))",
+                "INSERT INTO raw_files (fileName, fileType, recordCount, importTime) VALUES (?, ?, ?, datetime('now'))",
                 (file_name, file_type, imported)
             )
             conn.commit()
@@ -190,7 +189,7 @@ def handle_import(handler):
             _sync_employees(conn, records)
 
         conn.execute(
-            "INSERT INTO raw_files (file_name, file_type, record_count, import_time) VALUES (?, ?, ?, datetime('now'))",
+            "INSERT INTO raw_files (fileName, fileType, recordCount, importTime) VALUES (?, ?, ?, datetime('now'))",
             (file_name, file_type, imported)
         )
         conn.commit()
@@ -334,11 +333,19 @@ def handle_attendance_calculate(handler):
     conn.execute("DELETE FROM attendance_results WHERE month = ?", (month,))
 
     columns = [
-        'employee_no', 'name', 'department', 'date', 'month', 'status',
-        'sign_in', 'sign_out', 'late_minutes', 'early_minutes',
-        'overtime_hours', 'travel_hours', 'work_hours', 'leave_type',
-        'absent',
+        'employeeNo', 'name', 'department', 'date', 'month', 'status',
+        'signIn', 'signOut', 'lateMinutes', 'earlyMinutes',
+        'overtimeHours', 'travelHours', 'workHours', 'leaveType',
+        'absent', 'leaveHours', 'isRestDay', 'period',
+        'scheduleStart', 'scheduleEnd', 'missTime',
+        'sourcePunchIds', 'sourceLeaveIds', 'sourceTravelIds',
+        'sourceMissIds', 'sourceOvertimeIds',
     ]
+
+    json_cols = {
+        'sourcePunchIds', 'sourceLeaveIds', 'sourceTravelIds',
+        'sourceMissIds', 'sourceOvertimeIds',
+    }
 
     for r in results:
         values = []
@@ -346,6 +353,10 @@ def handle_attendance_calculate(handler):
             val = r.get(col, '')
             if val is None:
                 val = ''
+            if col in json_cols and not isinstance(val, str):
+                val = json.dumps(val, ensure_ascii=False)
+            if col == 'absent' and not isinstance(val, (int, str)):
+                val = 1 if val else 0
             values.append(val)
 
         placeholders = ', '.join(['?'] * len(columns))
@@ -357,8 +368,8 @@ def handle_attendance_calculate(handler):
 
     for co in (carry_over or []):
         conn.execute(
-            "INSERT OR REPLACE INTO carry_over (employee_no, name, month, overtime_balance) VALUES (?, ?, ?, ?)",
-            (co.get('employee_no', ''), co.get('name', ''), co.get('month', month), co.get('overtime_balance', 0))
+            "INSERT OR REPLACE INTO carry_over (employeeNo, name, month, overtimeBalance) VALUES (?, ?, ?, ?)",
+            (co.get('employeeNo', ''), co.get('name', ''), co.get('month', month), co.get('overtimeBalance', co.get('overtime_balance', 0)))
         )
 
     conn.commit()
@@ -414,11 +425,8 @@ def handle_attendance_review(handler, result_id):
         (new_status, reviewer, result_id)
     )
 
-    conn.execute(
-        'INSERT INTO operation_logs (operator, action, target, detail) VALUES (?, ?, ?, ?)',
-        (reviewer, 'review', 'attendance_result:' + str(result_id),
-         json.dumps({'from': current_status, 'to': new_status}))
-    )
+    from database import log_operation
+    log_operation(conn, reviewer, 'review', json.dumps({'target': 'attendance_result:' + str(result_id), 'from': current_status, 'to': new_status}, ensure_ascii=False))
 
     conn.commit()
     conn.close()
@@ -453,11 +461,9 @@ def handle_dept_submit(handler):
 
     updated = result.rowcount
 
-    conn.execute(
-        'INSERT INTO operation_logs (operator, action, target, detail) VALUES (?, ?, ?, ?)',
-        (payload.get('username', ''), 'dept_submit', 'month:' + month,
-         json.dumps({'department': department, 'updated': updated}))
-    )
+    from database import log_operation
+    log_operation(conn, payload.get('username', ''), 'dept_submit',
+                  json.dumps({'department': department, 'updated': updated, 'month': month}, ensure_ascii=False))
 
     conn.commit()
     conn.close()
@@ -496,11 +502,9 @@ def handle_attendance_lock(handler):
     )
     locked = result.rowcount
 
-    conn.execute(
-        'INSERT INTO operation_logs (operator, action, target, detail) VALUES (?, ?, ?, ?)',
-        (payload.get('username', ''), 'lock', 'month:' + month,
-         json.dumps({'locked': locked}))
-    )
+    from database import log_operation
+    log_operation(conn, payload.get('username', ''), 'lock',
+                  json.dumps({'locked': locked, 'month': month}, ensure_ascii=False))
 
     conn.commit()
     conn.close()
@@ -571,7 +575,7 @@ def handle_leave_get(handler):
     conn = get_db()
     if month:
         rows = conn.execute(
-            "SELECT * FROM leave_records WHERE strftime('%Y-%m', start_date) = ? OR strftime('%Y-%m', end_date) = ? ORDER BY id",
+            "SELECT * FROM leave_records WHERE strftime('%Y-%m', startDate) = ? OR strftime('%Y-%m', endDate) = ? ORDER BY id",
             (month, month)).fetchall()
     else:
         rows = conn.execute("SELECT * FROM leave_records ORDER BY id").fetchall()
@@ -594,7 +598,7 @@ def handle_travel_get(handler):
     conn = get_db()
     if month:
         rows = conn.execute(
-            "SELECT * FROM travel_records WHERE strftime('%Y-%m', start_date) = ? OR strftime('%Y-%m', end_date) = ? ORDER BY id",
+            "SELECT * FROM travel_records WHERE strftime('%Y-%m', startDate) = ? OR strftime('%Y-%m', endDate) = ? ORDER BY id",
             (month, month)).fetchall()
     else:
         rows = conn.execute("SELECT * FROM travel_records ORDER BY id").fetchall()
@@ -617,7 +621,7 @@ def handle_miss_get(handler):
     conn = get_db()
     if month:
         rows = conn.execute(
-            "SELECT * FROM miss_punch_records WHERE strftime('%Y-%m', miss_date) = ? ORDER BY id",
+            "SELECT * FROM miss_punch_records WHERE strftime('%Y-%m', missDate) = ? ORDER BY id",
             (month,)).fetchall()
     else:
         rows = conn.execute("SELECT * FROM miss_punch_records ORDER BY id").fetchall()

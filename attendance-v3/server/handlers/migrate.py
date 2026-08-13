@@ -40,38 +40,41 @@ def handle_migrate(handler):
 def _migrate_records(conn, data, report):
     mappings = [
         ('punch_records', 'punch', {
-            'employee_no': 'employeeNo', 'name': 'name', 'department': 'department',
-            'date': 'date', 'period': 'period', 'sign_in': 'signIn', 'sign_out': 'signOut',
-            'late_minutes': 'lateMinutes', 'early_minutes': 'earlyMinutes',
-            'overtime_hours': 'overtimeHours', 'schedule_start': 'scheduleStart',
-            'schedule_end': 'scheduleEnd', 'absent': 'absent',
+            'employeeNo': 'employeeNo', 'name': 'name', 'department': 'department',
+            'date': 'date', 'period': 'period', 'signIn': 'signIn', 'signOut': 'signOut',
+            'lateMinutes': 'lateMinutes', 'earlyMinutes': 'earlyMinutes',
+            'overtimeHours': 'overtimeHours', 'scheduleStart': 'scheduleStart',
+            'scheduleEnd': 'scheduleEnd', 'absent': 'absent', 'workHours': 'workHours',
         }),
         ('leave_records', 'leave', {
-            'applicant': 'applicant', 'department': 'department', 'leave_type': 'leaveType',
-            'start_date': 'startDate', 'end_date': 'endDate',
-            'leave_days': 'leaveDays', 'leave_hours': 'leaveHours', 'reason': 'reason',
+            'applicant': 'applicant', 'department': 'department', 'leaveType': 'leaveType',
+            'startDate': 'startDate', 'endDate': 'endDate',
+            'leaveDays': 'leaveDays', 'leaveHours': 'leaveHours', 'reason': 'reason',
         }),
         ('overtime_records', 'overtime', {
             'applicant': 'applicant', 'department': 'department',
-            'overtime_hours': 'overtimeHours', 'content': 'content',
+            'overtimeHours': 'overtimeHours', 'content': 'content',
+            'startTime': 'startTime', 'endTime': 'endTime',
         }),
         ('travel_records', 'travel', {
             'applicant': 'applicant', 'department': 'department', 'destination': 'destination',
-            'start_date': 'startDate', 'end_date': 'endDate', 'reason': 'reason',
+            'startDate': 'startDate', 'endDate': 'endDate', 'reason': 'reason',
+            'travelers': 'travelers', 'travelType': 'travelType',
         }),
         ('miss_punch_records', 'miss_punch', {
             'applicant': 'applicant', 'department': 'department',
-            'miss_date': 'missDate', 'reason': 'reason',
+            'missDate': 'missDate', 'reason': 'reason',
+            'missPerson': 'missPerson', 'missTime': 'missTime', 'cardTime': 'cardTime',
         }),
         ('schedules', 'schedule', {
-            'employee_no': 'employeeNo', 'name': 'name', 'department': 'department',
-            'year': 'year', 'month': 'month', 'work_days': 'workDays',
+            'employeeNo': 'employeeNo', 'name': 'name', 'department': 'department',
+            'year': 'year', 'month': 'month', 'workDays': 'workDays',
         }),
         ('employees', 'employee', {
-            'employee_no': 'employeeNo', 'name': 'name', 'department': 'department',
+            'employeeNo': 'employeeNo', 'name': 'name', 'department': 'department',
         }),
         ('holidays', 'holiday', {
-            'date': 'date', 'name': 'name', 'is_workday': 'isWorkday', 'is_holiday': 'isHoliday',
+            'date': 'date', 'name': 'name', 'isWorkday': 'isWorkday', 'isHoliday': 'isHoliday',
         }),
     ]
 
@@ -113,34 +116,34 @@ def _migrate_records(conn, data, report):
         for row in results:
             try:
                 mapped = {
-                    'employee_no': row.get('employeeNo', ''),
+                    'employeeNo': row.get('employeeNo', ''),
                     'name': row.get('name', ''),
                     'department': row.get('department', ''),
                     'date': row.get('date', ''),
                     'month': row.get('month', ''),
                     'status': row.get('status', ''),
-                    'sign_in': row.get('signIn', ''),
-                    'sign_out': row.get('signOut', ''),
-                    'late_minutes': row.get('lateMinutes', 0),
-                    'early_minutes': row.get('earlyMinutes', 0),
-                    'overtime_hours': row.get('overtimeHours', 0),
-                    'travel_hours': row.get('travelHours', 0),
-                    'work_hours': row.get('workHours', 0),
-                    'leave_type': row.get('leaveType', ''),
-                    'leave_hours': row.get('leaveHours', 0),
+                    'signIn': row.get('signIn', ''),
+                    'signOut': row.get('signOut', ''),
+                    'lateMinutes': row.get('lateMinutes', 0),
+                    'earlyMinutes': row.get('earlyMinutes', 0),
+                    'overtimeHours': row.get('overtimeHours', 0),
+                    'travelHours': row.get('travelHours', 0),
+                    'workHours': row.get('workHours', 0),
+                    'leaveType': row.get('leaveType', ''),
+                    'leaveHours': row.get('leaveHours', 0),
                     'absent': 1 if row.get('absent') else 0,
-                    'is_rest_day': 1 if row.get('isRestDay') else 0,
+                    'isRestDay': 1 if row.get('isRestDay') else 0,
                 }
                 if row.get('sourcePunchIds'):
-                    mapped['source_punch_ids'] = json.dumps(row['sourcePunchIds'], ensure_ascii=False)
+                    mapped['sourcePunchIds'] = json.dumps(row['sourcePunchIds'], ensure_ascii=False)
                 if row.get('sourceLeaveIds'):
-                    mapped['source_leave_ids'] = json.dumps(row['sourceLeaveIds'], ensure_ascii=False)
+                    mapped['sourceLeaveIds'] = json.dumps(row['sourceLeaveIds'], ensure_ascii=False)
                 if row.get('sourceTravelIds'):
-                    mapped['source_travel_ids'] = json.dumps(row['sourceTravelIds'], ensure_ascii=False)
+                    mapped['sourceTravelIds'] = json.dumps(row['sourceTravelIds'], ensure_ascii=False)
                 if row.get('sourceMissIds'):
-                    mapped['source_miss_ids'] = json.dumps(row['sourceMissIds'], ensure_ascii=False)
+                    mapped['sourceMissIds'] = json.dumps(row['sourceMissIds'], ensure_ascii=False)
                 if row.get('sourceOvertimeIds'):
-                    mapped['source_overtime_ids'] = json.dumps(row['sourceOvertimeIds'], ensure_ascii=False)
+                    mapped['sourceOvertimeIds'] = json.dumps(row['sourceOvertimeIds'], ensure_ascii=False)
 
                 cols = ', '.join(mapped.keys())
                 placeholders = ', '.join(['?'] * len(mapped))
@@ -161,7 +164,7 @@ def _migrate_records(conn, data, report):
         for row in data['carry_over']:
             try:
                 conn.execute(
-                    'INSERT OR REPLACE INTO carry_over(employee_no, name, month, overtime_balance) VALUES (?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO carry_over(employeeNo, name, month, overtimeBalance) VALUES (?, ?, ?, ?)',
                     (row.get('employeeNo', ''), row.get('name', ''), row.get('month', ''), row.get('overtimeBalance', 0))
                 )
                 imported += 1

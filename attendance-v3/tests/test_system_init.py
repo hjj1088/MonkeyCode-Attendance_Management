@@ -1,5 +1,5 @@
 """
-系统初始化单元测试
+系统初始化单元测试（V3.2）
 """
 import os
 import sys
@@ -9,8 +9,6 @@ import tempfile
 import bcrypt
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server'))
-
-pytestmark = pytest.mark.skip(reason='V3.2: init_system/users admin flow not implemented in V3.1')
 
 
 @pytest.fixture(autouse=True)
@@ -22,7 +20,7 @@ def setup_db(monkeypatch):
     monkeypatch.setattr(database, 'DB_PATH', db_path)
     if os.path.exists(db_path):
         os.remove(db_path)
-    database.init_tables()
+    database.init_db()
     yield
     try:
         os.remove(db_path)
@@ -46,31 +44,38 @@ class MockHandler:
 class TestInitSystem:
     def test_init_system_writes_defaults(self):
         import database
-        database.init_system()
         conn = database.get_db()
+        database.init_system(conn)
         rows = conn.execute("SELECT key, value FROM settings ORDER BY key").fetchall()
         conn.close()
         settings = {r['key']: r['value'] for r in rows}
-        assert settings['company_name'] == '默认公司'
+        assert settings['company_name'] == '考勤管理系统'
         assert settings['data_retention_days'] == '365'
-        assert settings['work_start_time'] == '08:30'
-        assert settings['work_end_time'] == '17:30'
-        assert settings['late_threshold'] == '0'
-        assert settings['early_threshold'] == '0'
-        assert settings['tolerance_count'] == '2'
-        assert settings['tolerance_minutes'] == '30'
+        config = json.loads(settings['attendance_config'])
+        assert config['workStartTime'] == '08:30'
+        assert config['workEndTime'] == '17:30'
+        assert config['lateThreshold'] == 0
+        assert config['earlyThreshold'] == 0
+        assert config['graceTimes'] == 2
+        assert config['graceMinutes'] == 30
 
     def test_init_system_idempotent(self):
         import database
-        database.init_system()
-        count1 = len(database.get_db().execute("SELECT * FROM settings").fetchall())
-        database.init_system()
-        count2 = len(database.get_db().execute("SELECT * FROM settings").fetchall())
+        conn = database.get_db()
+        database.init_system(conn)
+        count1 = len(conn.execute("SELECT * FROM settings").fetchall())
+        database.init_system(conn)
+        count2 = len(conn.execute("SELECT * FROM settings").fetchall())
+        conn.close()
         assert count1 == count2
-        assert count1 >= 8
+        assert count1 >= 3
 
 
 class TestDefaultPasswordDetection:
+    def _token(self, username, role, department='系统'):
+        from middleware import generate_token
+        return generate_token(1, username, role, department)
+
     def test_admin_default_password_detected(self):
         import database
         from handlers.auth import ensure_admin_user
@@ -79,9 +84,7 @@ class TestDefaultPasswordDetection:
         ensure_admin_user()
 
         h = MockHandler()
-        from handlers.auth import generate_token
-        token = generate_token(1, 'admin', 'hradmin', '系统')
-        h.headers = {'Authorization': 'Bearer ' + token}
+        h.headers = {'Authorization': 'Bearer ' + self._token('admin', 'hradmin')}
         handle_check_default_password(h)
         assert h.sent['code'] == 0
         assert h.sent['data']['is_default'] is True
@@ -94,15 +97,13 @@ class TestDefaultPasswordDetection:
         ensure_admin_user()
 
         h0 = MockHandler()
-        from handlers.auth import generate_token
-        token = generate_token(1, 'admin', 'hradmin', '系统')
-        h0.headers = {'Authorization': 'Bearer ' + token}
+        h0.headers = {'Authorization': 'Bearer ' + self._token('admin', 'hradmin')}
         h0._body = json.dumps({'current_password': 'admin123', 'new_password': 'NewP@ssw0rd!'})
         handle_admin_password(h0)
         assert h0.sent['code'] == 0
 
         h1 = MockHandler()
-        h1.headers = {'Authorization': 'Bearer ' + token}
+        h1.headers = {'Authorization': 'Bearer ' + self._token('admin', 'hradmin')}
         handle_check_default_password(h1)
         assert h1.sent['data']['is_default'] is False
 
@@ -114,9 +115,7 @@ class TestDefaultPasswordDetection:
         ensure_admin_user()
 
         h0 = MockHandler()
-        from handlers.auth import generate_token
-        token = generate_token(1, 'admin', 'hradmin', '系统')
-        h0.headers = {'Authorization': 'Bearer ' + token}
+        h0.headers = {'Authorization': 'Bearer ' + self._token('admin', 'hradmin')}
         h0._body = json.dumps({'current_password': 'admin123', 'new_password': 'NewP@ssw0rd!'})
         handle_admin_password(h0)
         assert h0.sent['code'] == 0
@@ -136,9 +135,7 @@ class TestDefaultPasswordDetection:
         ensure_admin_user()
 
         h0 = MockHandler()
-        from handlers.auth import generate_token
-        token = generate_token(1, 'admin', 'hradmin', '系统')
-        h0.headers = {'Authorization': 'Bearer ' + token}
+        h0.headers = {'Authorization': 'Bearer ' + self._token('admin', 'hradmin')}
         h0._body = json.dumps({'current_password': 'admin123', 'new_password': 'NewP@ssw0rd!'})
         handle_admin_password(h0)
         assert h0.sent['code'] == 0
@@ -157,9 +154,7 @@ class TestDefaultPasswordDetection:
         ensure_admin_user()
 
         h = MockHandler()
-        from handlers.auth import generate_token
-        token = generate_token(2, 'user', 'employee', '技术部')
-        h.headers = {'Authorization': 'Bearer ' + token}
+        h.headers = {'Authorization': 'Bearer ' + self._token('user', 'employee', '技术部')}
         h._body = json.dumps({'current_password': 'admin123', 'new_password': 'NewP@ssw0rd!'})
         handle_admin_password(h)
         assert h.sent['code'] == 403

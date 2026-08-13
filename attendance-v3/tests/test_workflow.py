@@ -9,8 +9,6 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server'))
 
-pytestmark = pytest.mark.skip(reason='V3.2: multi-role review workflow not implemented in V3.1')
-
 
 @pytest.fixture(autouse=True)
 def setup_db(monkeypatch):
@@ -21,8 +19,7 @@ def setup_db(monkeypatch):
     monkeypatch.setattr(database, 'DB_PATH', db_path)
     if os.path.exists(db_path):
         os.remove(db_path)
-    database.init_tables()
-    database.init_system()
+    database.init_db()
 
     from handlers.auth import ensure_admin_user
     ensure_admin_user()
@@ -66,7 +63,7 @@ class MockHandler:
 def _add_result(conn, result_id, review_status='pending_review', department='技术部', month='2026-07'):
     conn.execute(
         '''INSERT INTO attendance_results
-           (id, employee_no, name, department, date, month, status, review_status)
+           (id, employeeNo, name, department, date, month, status, review_status)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
         (result_id, 'T001', '张三', department, '2026-07-01', month, 'normal', review_status)
     )

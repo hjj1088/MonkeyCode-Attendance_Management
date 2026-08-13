@@ -113,6 +113,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS attendance_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             employeeNo TEXT NOT NULL DEFAULT '',
             name TEXT NOT NULL DEFAULT '',
             department TEXT NOT NULL DEFAULT '',
@@ -138,7 +139,10 @@ def init_db():
             sourceTravelIds TEXT NOT NULL DEFAULT '[]',
             sourceMissIds TEXT NOT NULL DEFAULT '[]',
             sourceOvertimeIds TEXT NOT NULL DEFAULT '[]',
-            missTime TEXT NOT NULL DEFAULT ''
+            missTime TEXT NOT NULL DEFAULT '',
+            review_status TEXT NOT NULL DEFAULT 'pending_review',
+            reviewed_by TEXT NOT NULL DEFAULT '',
+            reviewed_at TEXT NOT NULL DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS carry_over (
@@ -235,8 +239,71 @@ def init_db():
 
 def _migrate(conn):
     results_cols = {row[1] for row in conn.execute("PRAGMA table_info(attendance_results)").fetchall()}
+    if 'id' not in results_cols:
+        conn.execute("""
+            ALTER TABLE attendance_results RENAME TO attendance_results_old
+        """)
+        conn.execute("""
+            CREATE TABLE attendance_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employeeNo TEXT NOT NULL DEFAULT '',
+                name TEXT NOT NULL DEFAULT '',
+                department TEXT NOT NULL DEFAULT '',
+                date TEXT NOT NULL DEFAULT '',
+                period TEXT NOT NULL DEFAULT '',
+                scheduleStart TEXT NOT NULL DEFAULT '',
+                scheduleEnd TEXT NOT NULL DEFAULT '',
+                signIn TEXT NOT NULL DEFAULT '',
+                signOut TEXT NOT NULL DEFAULT '',
+                lateMinutes REAL NOT NULL DEFAULT 0,
+                earlyMinutes REAL NOT NULL DEFAULT 0,
+                overtimeHours REAL NOT NULL DEFAULT 0,
+                travelHours REAL NOT NULL DEFAULT 0,
+                leaveHours REAL NOT NULL DEFAULT 0,
+                workHours REAL NOT NULL DEFAULT 0,
+                absent INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT '',
+                leaveType TEXT NOT NULL DEFAULT '',
+                isRestDay INTEGER NOT NULL DEFAULT 0,
+                month TEXT NOT NULL DEFAULT '',
+                sourcePunchIds TEXT NOT NULL DEFAULT '[]',
+                sourceLeaveIds TEXT NOT NULL DEFAULT '[]',
+                sourceTravelIds TEXT NOT NULL DEFAULT '[]',
+                sourceMissIds TEXT NOT NULL DEFAULT '[]',
+                sourceOvertimeIds TEXT NOT NULL DEFAULT '[]',
+                missTime TEXT NOT NULL DEFAULT '',
+                review_status TEXT NOT NULL DEFAULT 'pending_review',
+                reviewed_by TEXT NOT NULL DEFAULT '',
+                reviewed_at TEXT NOT NULL DEFAULT ''
+            )
+        """)
+        conn.execute("""
+            INSERT INTO attendance_results
+                (employeeNo, name, department, date, period, scheduleStart, scheduleEnd,
+                 signIn, signOut, lateMinutes, earlyMinutes, overtimeHours, travelHours,
+                 leaveHours, workHours, absent, status, leaveType, isRestDay, month,
+                 sourcePunchIds, sourceLeaveIds, sourceTravelIds, sourceMissIds,
+                 sourceOvertimeIds, missTime, review_status, reviewed_by, reviewed_at)
+            SELECT employeeNo, name, department, date, period, scheduleStart, scheduleEnd,
+                 signIn, signOut, lateMinutes, earlyMinutes, overtimeHours, travelHours,
+                 leaveHours, workHours, absent, status, leaveType, isRestDay, month,
+                 sourcePunchIds, sourceLeaveIds, sourceTravelIds, sourceMissIds,
+                 sourceOvertimeIds, missTime, 'pending_review', '', ''
+            FROM attendance_results_old
+        """)
+        conn.execute("DROP TABLE attendance_results_old")
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_results_employeeNo ON attendance_results(employeeNo, date);
+            CREATE INDEX IF NOT EXISTS idx_results_month ON attendance_results(month);
+            CREATE INDEX IF NOT EXISTS idx_results_department ON attendance_results(department)
+        """)
+        return
     if 'missTime' not in results_cols:
         conn.execute("ALTER TABLE attendance_results ADD COLUMN missTime TEXT NOT NULL DEFAULT ''")
+    for col in ('review_status', 'reviewed_by', 'reviewed_at'):
+        if col not in results_cols:
+            default = "'pending_review'" if col == 'review_status' else "''"
+            conn.execute("ALTER TABLE attendance_results ADD COLUMN {} TEXT NOT NULL DEFAULT {}".format(col, default))
 
 
 def _init_settings(conn):

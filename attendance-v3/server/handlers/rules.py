@@ -1,7 +1,19 @@
 import json
-from datetime import datetime, timedelta
 from database import get_db
 from middleware import verify_token
+
+# V3.2 rules.py
+# 与 V3.1 前端契约对齐：考勤规则 + 容错规则均存放在 settings.attendance_config 单键
+# 字段 camelCase，与 V3.1 Store.getByKey('settings','attendance_config').value 一致。
+
+DEFAULT_CONFIG = {
+    'workStartTime': '08:30',
+    'workEndTime': '17:30',
+    'lateThreshold': 0,
+    'earlyThreshold': 0,
+    'graceTimes': 2,
+    'graceMinutes': 30,
+}
 
 
 def _require_hradmin(handler):
@@ -20,15 +32,26 @@ def _require_hradmin(handler):
     return payload
 
 
-def _get_setting(conn, key):
-    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-    return row['value'] if row else None
+def _get_config(conn):
+    row = conn.execute("SELECT value FROM settings WHERE key = 'attendance_config'").fetchone()
+    if not row:
+        return dict(DEFAULT_CONFIG)
+    try:
+        cfg = json.loads(row['value'])
+        if not isinstance(cfg, dict):
+            return dict(DEFAULT_CONFIG)
+        merged = dict(DEFAULT_CONFIG)
+        merged.update(cfg)
+        return merged
+    except (json.JSONDecodeError, TypeError):
+        return dict(DEFAULT_CONFIG)
 
 
-def _set_setting(conn, key, value):
+def _set_config(conn, cfg):
     conn.execute(
-        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
-        (key, value, value)
+        "INSERT INTO settings (key, value) VALUES ('attendance_config', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (json.dumps(cfg, ensure_ascii=False),)
     )
 
 
@@ -37,15 +60,14 @@ def handle_rules_config_get(handler):
     if payload is None:
         return
     conn = get_db()
-    config = {
-        'work_start_time': _get_setting(conn, 'work_start_time') or '08:30',
-        'work_end_time': _get_setting(conn, 'work_end_time') or '17:30',
-        'late_threshold': _get_setting(conn, 'late_threshold') or '0',
-        'early_threshold': _get_setting(conn, 'early_threshold') or '0',
-        'overtime_multiplier': _get_setting(conn, 'overtime_multiplier') or '1.5',
-    }
+    cfg = _get_config(conn)
     conn.close()
-    handler._send_json(0, data=config)
+    handler._send_json(0, data={
+        'workStartTime': cfg.get('workStartTime', '08:30'),
+        'workEndTime': cfg.get('workEndTime', '17:30'),
+        'lateThreshold': cfg.get('lateThreshold', 0),
+        'earlyThreshold': cfg.get('earlyThreshold', 0),
+    })
 
 
 def handle_rules_config_put(handler):
@@ -57,9 +79,11 @@ def handle_rules_config_put(handler):
         handler._send_json(400, message='请求体为空')
         return
     conn = get_db()
-    for key in ('work_start_time', 'work_end_time', 'late_threshold', 'early_threshold', 'overtime_multiplier'):
+    cfg = _get_config(conn)
+    for key in ('workStartTime', 'workEndTime', 'lateThreshold', 'earlyThreshold'):
         if key in body:
-            _set_setting(conn, key, str(body[key]))
+            cfg[key] = body[key]
+    _set_config(conn, cfg)
     conn.commit()
     conn.close()
     handler._send_json(0, data={'message': '考勤规则已更新'})
@@ -70,12 +94,12 @@ def handle_tolerance_get(handler):
     if payload is None:
         return
     conn = get_db()
-    config = {
-        'tolerance_count': _get_setting(conn, 'tolerance_count') or '2',
-        'tolerance_minutes': _get_setting(conn, 'tolerance_minutes') or '30',
-    }
+    cfg = _get_config(conn)
     conn.close()
-    handler._send_json(0, data=config)
+    handler._send_json(0, data={
+        'graceTimes': cfg.get('graceTimes', 2),
+        'graceMinutes': cfg.get('graceMinutes', 30),
+    })
 
 
 def handle_tolerance_put(handler):
@@ -87,9 +111,11 @@ def handle_tolerance_put(handler):
         handler._send_json(400, message='请求体为空')
         return
     conn = get_db()
-    for key in ('tolerance_count', 'tolerance_minutes'):
+    cfg = _get_config(conn)
+    for key in ('graceTimes', 'graceMinutes'):
         if key in body:
-            _set_setting(conn, key, str(body[key]))
+            cfg[key] = body[key]
+    _set_config(conn, cfg)
     conn.commit()
     conn.close()
     handler._send_json(0, data={'message': '容错规则已更新'})
@@ -127,7 +153,7 @@ def handle_holidays_post(handler):
         return
     dates = body.get('dates', [])
     name = body.get('name', '')
-    is_workday = body.get('is_workday', 0)
+    is_workday = body.get('is_workday', body.get('isWorkday', 0))
 
     if not dates or not name:
         handler._send_json(400, message='缺少必要参数')
@@ -140,8 +166,8 @@ def handle_holidays_post(handler):
         if existing:
             continue
         conn.execute(
-            "INSERT INTO holidays (date, name, is_workday, is_holiday) VALUES (?, ?, ?, ?)",
-            (date_str, name, is_workday, 0 if is_workday else 1)
+            "INSERT INTO holidays (date, name, isWorkday, isHoliday) VALUES (?, ?, ?, ?)",
+            (date_str, name, 1 if is_workday else 0, 0 if is_workday else 1)
         )
         count += 1
     conn.commit()
@@ -196,15 +222,12 @@ def handle_work_schedule_get(handler):
     else:
         rows = conn.execute("SELECT * FROM schedules").fetchall()
 
-    ws_row = conn.execute("SELECT value FROM settings WHERE key = 'work_start_time'").fetchone()
-    we_row = conn.execute("SELECT value FROM settings WHERE key = 'work_end_time'").fetchone()
-    default_ws = ws_row['value'] if ws_row else '08:30'
-    default_we = we_row['value'] if we_row else '17:30'
+    cfg = _get_config(conn)
     conn.close()
 
     result = []
     for r in rows:
-        work_days = r['work_days']
+        work_days = r['workDays']
         if isinstance(work_days, str):
             try:
                 work_days = json.loads(work_days)
@@ -212,13 +235,13 @@ def handle_work_schedule_get(handler):
                 work_days = {}
         result.append({
             'id': r['id'],
-            'employee_no': r['employee_no'],
+            'employeeNo': r['employeeNo'],
             'name': r['name'],
             'department': r['department'],
             'year': r['year'],
             'month': r['month'],
-            'work_days': work_days,
-            'work_start_time': default_ws,
-            'work_end_time': default_we,
+            'workDays': work_days,
+            'workStartTime': cfg.get('workStartTime', '08:30'),
+            'workEndTime': cfg.get('workEndTime', '17:30'),
         })
     handler._send_json(0, data=result)

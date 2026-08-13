@@ -6,16 +6,10 @@ import json
 import urllib.parse
 import sys
 import os
-import hashlib
-import hmac
-import base64
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database import get_db, init_db
 
-JWT_SECRET = 'attendance-v3-secret-key-2026'
-ADMIN_PASSWORD_HASH = hashlib.sha256('admin123'.encode()).hexdigest()
 PORT = 8001
 
 # Map tables whose primary key is not the autoincrement `id` column
@@ -24,48 +18,6 @@ PRIMARY_KEYS = {
     'employees': 'employeeNo',
     'settings': 'key',
 }
-
-
-def b64url_encode(data):
-    return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
-
-
-def b64url_decode(s):
-    s += '=' * (4 - len(s) % 4) if len(s) % 4 else ''
-    return base64.urlsafe_b64decode(s)
-
-
-def generate_token(username='admin'):
-    header = b64url_encode(json.dumps({'alg': 'HS256', 'typ': 'JWT'}).encode())
-    payload = b64url_encode(json.dumps({
-        'username': username,
-        'exp': int(time.time()) + 86400,
-        'iat': int(time.time())
-    }).encode())
-    sig = hmac.new(JWT_SECRET.encode(), f'{header}.{payload}'.encode(), hashlib.sha256).digest()
-    return f'{header}.{payload}.{b64url_encode(sig)}'
-
-
-def verify_token(token_str):
-    try:
-        parts = token_str.split('.')
-        if len(parts) != 3:
-            return None
-        header_b64, payload_b64, sig_b64 = parts
-        expected_sig = hmac.new(
-            JWT_SECRET.encode(),
-            f'{header_b64}.{payload_b64}'.encode(),
-            hashlib.sha256
-        ).digest()
-        sig = b64url_decode(sig_b64)
-        if not hmac.compare_digest(sig, expected_sig):
-            return None
-        payload = json.loads(b64url_decode(payload_b64))
-        if payload.get('exp', 0) < time.time():
-            return None
-        return payload
-    except Exception:
-        return None
 
 
 def json_serialize(val):
@@ -108,12 +60,13 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({'code': code, **kwargs}, ensure_ascii=False).encode())
 
     def _authenticate(self):
+        from middleware import verify_token as verify_jwt
         auth = self.headers.get('Authorization', '')
         token = auth.replace('Bearer ', '') if auth.startswith('Bearer ') else ''
         if not token:
             self._send_json(401, message='未提供认证令牌')
             return None
-        payload = verify_token(token)
+        payload = verify_jwt(token)
         if payload is None:
             self._send_json(401, message='令牌已过期或无效')
             return None
@@ -138,6 +91,92 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         if path == '/api/system/version':
             from handlers.system import handle_system_version
             handle_system_version(self)
+            return
+
+        # V3.2 handlers (self-contained auth, mounted before /api/store/*)
+        if path == '/api/system/status':
+            from handlers.system import handle_system_status
+            handle_system_status(self)
+            return
+
+        if path == '/api/system/check-default-password':
+            from handlers.system import handle_check_default_password
+            handle_check_default_password(self)
+            return
+
+        if path == '/api/system/config':
+            from handlers.system import handle_system_config
+            handle_system_config(self)
+            return
+
+        if path == '/api/rules/config':
+            from handlers.rules import handle_rules_config_get
+            handle_rules_config_get(self)
+            return
+
+        if path == '/api/rules/tolerance':
+            from handlers.rules import handle_tolerance_get
+            handle_tolerance_get(self)
+            return
+
+        if path == '/api/rules/holidays':
+            from handlers.rules import handle_holidays_get
+            handle_holidays_get(self)
+            return
+
+        if path == '/api/rules/work-schedule':
+            from handlers.rules import handle_work_schedule_get
+            handle_work_schedule_get(self)
+            return
+
+        if path == '/api/users':
+            from handlers.users import handle_users_list
+            handle_users_list(self)
+            return
+
+        if path.startswith('/api/users/'):
+            from handlers.users import handle_users_list
+            handle_users_list(self)
+            return
+
+        if path == '/api/attendance/my':
+            from handlers.attendance import handle_attendance_my
+            handle_attendance_my(self)
+            return
+
+        if path in ('/api/attendance/dept', '/api/attendance/all'):
+            from handlers.attendance import handle_attendance_all
+            handle_attendance_all(self)
+            return
+
+        if path == '/api/attendance/summary':
+            from handlers.attendance import handle_attendance_summary
+            handle_attendance_summary(self)
+            return
+
+        if path == '/api/attendance/leaves':
+            from handlers.attendance import handle_leave_get
+            handle_leave_get(self)
+            return
+
+        if path == '/api/attendance/travels':
+            from handlers.attendance import handle_travel_get
+            handle_travel_get(self)
+            return
+
+        if path == '/api/attendance/misses':
+            from handlers.attendance import handle_miss_get
+            handle_miss_get(self)
+            return
+
+        if path == '/api/attendance/overtime':
+            from handlers.attendance import handle_overtime_all_get
+            handle_overtime_all_get(self)
+            return
+
+        if path == '/api/attendance/data-month':
+            from handlers.attendance import handle_data_month
+            handle_data_month(self)
             return
 
         # GET /api/* paths require auth
@@ -203,7 +242,48 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         path = parsed.path
 
         if path == '/api/auth/login':
-            self._handle_login()
+            from handlers.auth import handle_login
+            handle_login(self)
+            return
+
+        if path == '/api/auth/change-password':
+            from handlers.auth import handle_change_password
+            handle_change_password(self)
+            return
+
+        if path == '/api/users':
+            from handlers.users import handle_users_create
+            handle_users_create(self)
+            return
+
+        if path == '/api/users/reset-password':
+            from handlers.users import handle_users_reset_password
+            handle_users_reset_password(self)
+            return
+
+        if path == '/api/attendance/import':
+            from handlers.attendance import handle_import
+            handle_import(self)
+            return
+
+        if path == '/api/attendance/calculate':
+            from handlers.attendance import handle_attendance_calculate
+            handle_attendance_calculate(self)
+            return
+
+        if path == '/api/system/seed-test-data':
+            from handlers.system import handle_seed_test_data
+            handle_seed_test_data(self)
+            return
+
+        if path == '/api/system/reset-data':
+            from handlers.system import handle_reset_data
+            handle_reset_data(self)
+            return
+
+        if path == '/api/migrate':
+            from handlers.migrate import handle_migrate
+            handle_migrate(self)
             return
 
         if not self._authenticate():
@@ -235,9 +315,97 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
 
         self._send_json(404, message='Not Found')
 
+    def do_PATCH(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+
+        if path == '/api/users/reset-password':
+            from handlers.users import handle_users_reset_password
+            handle_users_reset_password(self)
+            return
+
+        import re
+        m = re.match(r'/api/users/(\d+)/status$', path)
+        if m:
+            from handlers.users import handle_users_status
+            self.path = '/api/users/' + m.group(1) + '/status'
+            handle_users_status(self)
+            return
+
+        m = re.match(r'/api/attendance/(\d+)/review$', path)
+        if m:
+            from handlers.attendance import handle_attendance_review
+            handle_attendance_review(self, int(m.group(1)))
+            return
+
+        if path == '/api/attendance/dept/submit':
+            from handlers.attendance import handle_dept_submit
+            handle_dept_submit(self)
+            return
+
+        if path == '/api/attendance/lock':
+            from handlers.attendance import handle_attendance_lock
+            handle_attendance_lock(self)
+            return
+
+        self._send_json(404, message='Not Found')
+
+    def do_PUT(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+
+        import re
+        m = re.match(r'/api/users/(\d+)$', path)
+        if m:
+            from handlers.users import handle_users_update
+            self.path = '/api/users/' + m.group(1)
+            handle_users_update(self)
+            return
+
+        m = re.match(r'/api/users/(\d+)/status$', path)
+        if m:
+            from handlers.users import handle_users_status
+            self.path = '/api/users/' + m.group(1) + '/status'
+            handle_users_status(self)
+            return
+
+        if path == '/api/system/admin-password':
+            from handlers.system import handle_admin_password
+            handle_admin_password(self)
+            return
+
+        if path == '/api/system/config':
+            from handlers.system import handle_system_config_update
+            handle_system_config_update(self)
+            return
+
+        if path == '/api/rules/config':
+            from handlers.rules import handle_rules_config_put
+            handle_rules_config_put(self)
+            return
+
+        if path == '/api/rules/tolerance':
+            from handlers.rules import handle_tolerance_put
+            handle_tolerance_put(self)
+            return
+
+        if path == '/api/rules/holidays':
+            from handlers.rules import handle_holidays_post
+            handle_holidays_post(self)
+            return
+
+        self._send_json(404, message='Not Found')
+
     def do_DELETE(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+
+        import re
+        m = re.match(r'/api/rules/holidays/(\d+)$', path)
+        if m:
+            from handlers.rules import handle_holidays_delete
+            handle_holidays_delete(self)
+            return
 
         if not self._authenticate():
             return
@@ -258,24 +426,11 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
 
     # --- Auth ---
 
-    def _handle_login(self):
-        body = self._read_body()
-        username = (body.get('username') or '').strip()
-        password = (body.get('password') or '').strip()
-        if username != 'admin':
-            self._send_json(1, message='账号或密码错误')
-            return
-        pw_hash = hashlib.sha256(password.encode()).hexdigest()
-        if pw_hash != ADMIN_PASSWORD_HASH:
-            self._send_json(1, message='账号或密码错误')
-            return
-        token = generate_token(username)
-        self._send_json(0, data={'token': token, 'username': username})
-
     def _handle_login_check(self):
+        from middleware import verify_token as verify_jwt
         auth = self.headers.get('Authorization', '')
         token = auth.replace('Bearer ', '') if auth.startswith('Bearer ') else ''
-        if token and verify_token(token):
+        if token and verify_jwt(token):
             self._send_json(0, data={'valid': True})
         else:
             self._send_json(401, message='令牌无效')
@@ -476,8 +631,12 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
 
 def main():
     init_db()
+    from handlers.auth import ensure_admin_user
+    from handlers.system import set_start_time
+    ensure_admin_user()
+    set_start_time()
     server = http.server.HTTPServer(('0.0.0.0', PORT), APIHandler)
-    print(f'[V3.1] Server running on port {PORT}')
+    print(f'[V3.2] Server running on port {PORT}')
     server.serve_forever()
 
 

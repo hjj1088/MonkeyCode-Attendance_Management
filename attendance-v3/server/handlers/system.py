@@ -290,13 +290,13 @@ def handle_seed_test_data(handler):
             sign_out = '{:02d}:{:02d}'.format(sign_out_h, sign_out_m)
 
             conn.execute(
-                "INSERT OR IGNORE INTO punch_records (employee_no, name, department, date, sign_in, sign_out, schedule_start, schedule_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO punch_records (employeeNo, name, department, date, signIn, signOut, scheduleStart, scheduleEnd) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (emp['username'], emp['name'], emp['department'], date_str, sign_in, sign_out, '08:30', '17:30')
             )
 
         leave_date = first_day + timedelta(days=random.randint(5, 15))
         conn.execute(
-            "INSERT INTO leave_records (applicant, department, leave_type, start_date, end_date, leave_days, reason) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO leave_records (applicant, department, leaveType, startDate, endDate, leaveDays, reason) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (emp['name'], emp['department'], '年假', leave_date.strftime('%Y-%m-%d'), leave_date.strftime('%Y-%m-%d'), 1, '测试请假')
         )
 

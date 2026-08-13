@@ -10,8 +10,6 @@ import urllib.parse
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server'))
 
-pytestmark = pytest.mark.skip(reason='V3.2: rules/holidays handlers not mounted in V3.1')
-
 
 @pytest.fixture(autouse=True)
 def setup_db(monkeypatch):
@@ -22,8 +20,7 @@ def setup_db(monkeypatch):
     monkeypatch.setattr(database, 'DB_PATH', db_path)
     if os.path.exists(db_path):
         os.remove(db_path)
-    database.init_tables()
-    database.init_system()
+    database.init_db()
     yield
     try:
         os.remove(db_path)
@@ -67,20 +64,20 @@ class TestRulesConfig:
         from handlers.rules import handle_rules_config_get
         handle_rules_config_get(h)
         assert h.sent['code'] == 0
-        assert h.sent['data']['work_start_time'] == '08:30'
-        assert h.sent['data']['work_end_time'] == '17:30'
+        assert h.sent['data']['workStartTime'] == '08:30'
+        assert h.sent['data']['workEndTime'] == '17:30'
 
     def test_update_config(self):
         from handlers.rules import handle_rules_config_put, handle_rules_config_get
         h = make_hradmin_handler()
-        h._body = json.dumps({'late_threshold': '15', 'early_threshold': '10'})
+        h._body = json.dumps({'lateThreshold': 15, 'earlyThreshold': 10})
         handle_rules_config_put(h)
         assert h.sent['code'] == 0
 
         h2 = make_hradmin_handler()
         handle_rules_config_get(h2)
-        assert h2.sent['data']['late_threshold'] == '15'
-        assert h2.sent['data']['early_threshold'] == '10'
+        assert h2.sent['data']['lateThreshold'] == 15
+        assert h2.sent['data']['earlyThreshold'] == 10
 
     def test_employee_cannot_access(self):
         h = make_employee_handler()
@@ -101,20 +98,20 @@ class TestToleranceConfig:
         from handlers.rules import handle_tolerance_get
         handle_tolerance_get(h)
         assert h.sent['code'] == 0
-        assert h.sent['data']['tolerance_count'] == '2'
-        assert h.sent['data']['tolerance_minutes'] == '30'
+        assert h.sent['data']['graceTimes'] == 2
+        assert h.sent['data']['graceMinutes'] == 30
 
     def test_update_tolerance(self):
         from handlers.rules import handle_tolerance_put, handle_tolerance_get
         h = make_hradmin_handler()
-        h._body = json.dumps({'tolerance_count': '5', 'tolerance_minutes': '60'})
+        h._body = json.dumps({'graceTimes': 5, 'graceMinutes': 60})
         handle_tolerance_put(h)
         assert h.sent['code'] == 0
 
         h2 = make_hradmin_handler()
         handle_tolerance_get(h2)
-        assert h2.sent['data']['tolerance_count'] == '5'
-        assert h2.sent['data']['tolerance_minutes'] == '60'
+        assert h2.sent['data']['graceTimes'] == 5
+        assert h2.sent['data']['graceMinutes'] == 60
 
 
 class TestHolidays:
@@ -163,8 +160,8 @@ class TestHolidays:
         h2 = make_hradmin_handler()
         handle_holidays_get(h2)
         holiday = h2.sent['data'][0]
-        assert holiday['is_workday'] == 1
-        assert holiday['is_holiday'] == 0
+        assert holiday['isWorkday'] == 1
+        assert holiday['isHoliday'] == 0
 
     def test_delete_holiday(self):
         from handlers.rules import handle_holidays_post, handle_holidays_get, handle_holidays_delete
