@@ -292,11 +292,9 @@ def _migrate(conn):
             FROM attendance_results_old
         """)
         conn.execute("DROP TABLE attendance_results_old")
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_results_employeeNo ON attendance_results(employeeNo, date);
-            CREATE INDEX IF NOT EXISTS idx_results_month ON attendance_results(month);
-            CREATE INDEX IF NOT EXISTS idx_results_department ON attendance_results(department)
-        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_results_employeeNo ON attendance_results(employeeNo, date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_results_month ON attendance_results(month)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_results_department ON attendance_results(department)")
         return
     if 'missTime' not in results_cols:
         conn.execute("ALTER TABLE attendance_results ADD COLUMN missTime TEXT NOT NULL DEFAULT ''")

@@ -437,7 +437,18 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
 
     # --- Store CRUD ---
 
+    def _resolve_table(self, table):
+        return {
+            'punch': 'punch_records',
+            'leave': 'leave_records',
+            'overtime': 'overtime_records',
+            'travel': 'travel_records',
+            'miss_punch': 'miss_punch_records',
+            'schedule': 'schedules',
+        }.get(table, table)
+
     def _handle_store_get_all(self, table, params):
+        table = self._resolve_table(table)
         conn = get_db()
         try:
             index_name = params.get('index', [None])[0]
@@ -456,6 +467,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(500, message=str(e))
 
     def _handle_store_get_range(self, table, params):
+        table = self._resolve_table(table)
         conn = get_db()
         try:
             index_name = params.get('index', [''])[0]
@@ -476,6 +488,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(500, message=str(e))
 
     def _handle_store_get_by_key(self, table, key):
+        table = self._resolve_table(table)
         conn = get_db()
         try:
             pk = PRIMARY_KEYS.get(table, 'id')
@@ -490,6 +503,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(500, message=str(e))
 
     def _handle_store_put(self, table):
+        table = self._resolve_table(table)
         body = self._read_body()
         conn = get_db()
         try:
@@ -529,6 +543,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(500, message=str(e))
 
     def _handle_store_bulk_put(self, table):
+        table = self._resolve_table(table)
         body = self._read_body()
         records = body.get('records', body if isinstance(body, list) else [])
         if not records:
@@ -567,6 +582,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(500, message=str(e))
 
     def _handle_store_clear(self, table):
+        table = self._resolve_table(table)
         conn = get_db()
         try:
             conn.execute(f'DELETE FROM {table}')
@@ -578,6 +594,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(500, message=str(e))
 
     def _handle_store_delete_by_key(self, table, key):
+        table = self._resolve_table(table)
         conn = get_db()
         try:
             pk = PRIMARY_KEYS.get(table, 'id')
