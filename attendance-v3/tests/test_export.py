@@ -132,3 +132,31 @@ class TestExport:
         wb = openpyxl.load_workbook(output, data_only=True)
         ws = wb.active
         assert ws.cell(3, 2).value == '法定假日'
+
+    def test_build_calendar_groups_by_department(self):
+        from handlers.export import build_calendar_report
+        import openpyxl
+
+        results = [
+            {'employeeNo': 'T001', 'name': '张三', 'department': '技术部',
+             'date': '2026-07-01', 'status': 'normal', 'signIn': '08:30', 'signOut': '17:30'},
+            {'employeeNo': 'T002', 'name': '李四', 'department': '技术部',
+             'date': '2026-07-01', 'status': 'normal', 'signIn': '08:30', 'signOut': '17:30'},
+            {'employeeNo': 'S001', 'name': '王五', 'department': '销售部',
+             'date': '2026-07-01', 'status': 'leave', 'leaveType': '年假', 'leaveHours': 8},
+        ]
+        output = build_calendar_report('2026-07', [], results, [])
+        wb = openpyxl.load_workbook(output, data_only=True)
+        ws = wb.active
+
+        header1 = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
+        header2 = [ws.cell(2, c).value for c in range(1, ws.max_column + 1)]
+
+        # 部门名只在部门首列出现（合并单元格），技术部两人连续
+        assert header1.count('技术部') == 1
+        assert header1.count('销售部') == 1
+        assert '张三' in header2 and '李四' in header2 and '王五' in header2
+
+        tech_idx = header1.index('技术部')
+        assert header1[tech_idx + 1] in ('', None), 'second tech employee keeps dept header empty'
+        assert header1[tech_idx + 2] == '销售部', 'sales dept follows tech block'

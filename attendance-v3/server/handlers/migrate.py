@@ -91,6 +91,8 @@ def _migrate_records(conn, data, report):
                 mapped = {}
                 for dst_field, src_field in field_map.items():
                     val = row.get(src_field)
+                    if val is None:
+                        val = ''
                     if isinstance(val, (dict, list)):
                         val = json.dumps(val, ensure_ascii=False)
                     mapped[dst_field] = val
