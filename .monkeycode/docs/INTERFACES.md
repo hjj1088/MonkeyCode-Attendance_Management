@@ -329,3 +329,125 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 - IndexedDB 复合索引（如 `[employeeNo+year+month]`）→ SQLite 单列索引 + JS 内存过滤
 - `settings` 表主键为 `key`；`employees` 表主键为 `employeeNo`
 - 默认数据由 `database.py _init_settings()` 初始化（attendance_config + 默认导出模板）
+
+---
+
+# V3.2 REST API（多角色系统）
+
+> 本节描述 v3.2 相对 v3.1 的接口变化。V3.2 启用全部 handler（auth/users/system/rules/attendance/export/migrate）与 `middleware.py` PyJWT 统一认证，并新增多角色、审核工作流、用户管理等端点。
+
+## 通用约定（V3.2）
+
+- **端口**：后端 `http://127.0.0.1:8001`；前端 Vite dev `http://127.0.0.1:8002`（`/api` 代理到 8001）
+- **认证**：除 `/api/auth/login`、`/api/auth/login-check`、`/api/system/version` 外，一律 `Authorization: Bearer <token>`（PyJWT，HS256，24h）
+- **登录响应**：`{code:0, data:{token, user:{id,username,name,department,role}, need_change_password}}`
+- **默认账号**：`admin` / `admin123`（bcrypt），密码仍为默认值时登录返回 `need_change_password: true`，前端引导强制改密
+- **登录锁定**：连续 5 次密码错误锁定 30 分钟（`users.login_attempts` / `locked_until`）
+- **角色**：`hradmin` / `deptadmin` / `employee`；`middleware.py` 提供 `_require_hradmin` / `_require_any_user` 鉴权
+
+## 新增数据库表
+
+### users（V3.2）
+
+| 列 | 类型 | 说明 |
+|----|------|------|
+| id | INTEGER PK | 自增 |
+| username | TEXT UNIQUE | 登录名 |
+| name | TEXT | 姓名 |
+| department | TEXT | 部门 |
+| role | TEXT | hradmin/deptadmin/employee |
+| password_hash | TEXT | bcrypt 哈希 |
+| enabled | INTEGER | 1 启用 / 0 禁用 |
+| login_attempts | INTEGER | 连续失败次数 |
+| locked_until | TEXT | 锁定截止时间 |
+| created_at / updated_at | TEXT | 时间戳 |
+
+### operation_logs（V3.2）
+
+| 列 | 类型 | 说明 |
+|----|------|------|
+| id | INTEGER PK | 自增 |
+| username | TEXT | 操作人 |
+| action | TEXT | 动作（review/dept_submit/lock/create_user…） |
+| detail | TEXT | JSON 详情 |
+| created_at | TEXT | 时间戳 |
+
+### attendance_results 新增列（V3.2）
+
+相对 V3.1 增加 `id`（INTEGER PK）、`review_status`（默认 `pending_review`）、`reviewed_by`、`reviewed_at`、`missTime`。V3.1 库通过 `database.py _migrate()` 自动升级（重命名旧表 + 拷贝 + 重建索引）。
+
+## 用户与认证 API（V3.2）
+
+| 端点 | 方法 | 请求体 | 角色 |
+|------|------|--------|------|
+| `/api/auth/login` | POST | `{username, password}` | 公开 |
+| `/api/auth/change-password` | POST | `{old_password, new_password}` | 登录 |
+| `/api/users` | GET/POST | POST `{username,name,department,role,password}` | hradmin |
+| `/api/users/{id}/status` | PATCH | `{enabled:0\|1}` | hradmin |
+| `/api/users/reset-password` | POST | `{username, new_password}` | hradmin |
+
+## 系统与规则 API（V3.2）
+
+| 端点 | 方法 | 请求体 | 角色 |
+|------|------|--------|------|
+| `/api/system/version` `/config` | GET | — | 登录 |
+| `/api/system/status` | GET | —（含各表行数） | hradmin |
+| `/api/system/admin-password` | PUT | `{current_password, new_password}` | hradmin |
+| `/api/system/check-default-password` | GET | — | hradmin |
+| `/api/system/seed-test-data` | POST | — | hradmin |
+| `/api/system/reset-data` | POST | —（清业务表，保留 users/settings） | hradmin |
+| `/api/rules/config` | GET/PUT | 考勤时段 | hradmin |
+| `/api/rules/tolerance` | GET/PUT | 容错规则 | hradmin |
+| `/api/rules/holidays` | GET/POST/DELETE | 假期管理 | hradmin |
+| `/api/rules/work-schedule` | GET | 排班信息 | hradmin |
+
+`rules` 配置统一存 `settings.attendance_config` 单键（camelCase：workStartTime/workEndTime/lateThreshold/earlyThreshold/graceTimes/graceMinutes），与 V3.1 前端契约一致。
+
+## 考勤 API（V3.2）
+
+| 端点 | 方法 | 请求体 | 角色 |
+|------|------|--------|------|
+| `/api/attendance/import` | POST | `{type, records, file_name}`（6 类型） | 登录 |
+| `/api/attendance/calculate` | POST | `{results, month, carry_over}` | 登录 |
+| `/api/attendance/my?month=` | GET | —（按 `name`+month 查询本人） | 登录 |
+| `/api/attendance/all?month=` | GET | —（deptadmin 过滤本部门，employee 403） | deptadmin/hradmin |
+| `/api/attendance/summary` | GET | —（按部门/状态汇总） | hradmin |
+| `/api/attendance/{id}/review` | PATCH | `{review_status}` | deptadmin/hradmin |
+| `/api/attendance/dept/submit` | PATCH | `{month}`（hradmin 提交全部，deptadmin 提交本部门） | deptadmin/hradmin |
+| `/api/attendance/lock` | PATCH | `{month}`（要求该月全部 submitted） | hradmin |
+| `/api/attendance/leaves` `/travels` `/misses` `/overtime` `/data-month` | GET | 各类 OA 数据 | 登录 |
+
+`handle_attendance_calculate` 行为：删除该 `month` 旧结果 → 批量插入 `results`（含 review 三字段）→ 写入 `carry_over`。
+
+### 审核状态机（`valid_transitions`）
+
+```
+pending_review → confirmed / disputed
+confirmed → disputed
+disputed → confirmed
+submitted / locked → （终态，不可变更）
+```
+
+## 迁移 API（V3.2）
+
+`POST /api/migrate`（hradmin）：请求体为 V2.0 导出 JSON（`{employee, punch, leave, schedule, holiday, settings, attendance_results, carry_over}`），按字段映射 `INSERT OR IGNORE` 落库；单条失败记入 `report.errors`，整体异常时 `conn.rollback()` 并报告"已回滚"。注意：迁移前 `None` 值必须转为 `''`，否则违反 NOT NULL 约束会被 `INSERT OR IGNORE` 静默忽略（实际零落库）。
+
+## store 表名映射（V3.2）
+
+`/api/store/{table}` 支持 V3.1 前端短表名，自动映射物理表名：
+
+| 短表名 | 物理表 |
+|--------|--------|
+| punch | punch_records |
+| leave | leave_records |
+| overtime | overtime_records |
+| travel | travel_records |
+| miss_punch | miss_punch_records |
+| schedule | schedules |
+
+其余（settings/employees/holidays/carry_over/export_templates/attendance_results/users…）同名。`PRIMARY_KEYS = {employees: 'employeeNo', settings: 'key'}`，其余默认 `id`。
+
+## 字段序列化（V3.2）
+
+- `json_serialize` 对 `value`（settings）、`workDays`（schedules）、`fields`（export_templates）、`source*Ids`（attendance_results）自动 `json.loads` 反序列化——**前端取到的 settings.value 是对象**，测试 mock 与断言需按对象处理
+- 布尔列（isWorkday/isHoliday/isDefault/absent/isRestDay）序列化为 `bool`

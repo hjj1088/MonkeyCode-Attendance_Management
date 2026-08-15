@@ -368,3 +368,156 @@ api-store.js ── fetch ──► server.py (/api/*) ──► database.py (SQ
 2. **两套认证并存**：`server.py` 手写 HMAC JWT（硬编码 secret、admin/admin123 SHA256）与 `middleware.py` 的 PyJWT 认证互不兼容，后者未使用。
 3. **测试与实现脱节**：`tests/` 中部分测试引用 `database.init_tables()`、15 张表等，与当前 `init_db()`、13 张表实现不符，测试无法通过。
 4. **login.html 遗留问题**：V3.1 的 `login.html` 第 74 行仍按 V2.0 同步风格调用异步 `Auth.login()`，登录不可用；实际入口是 `index.html`（已迁移为 `.then()` 风格）。
+
+---
+
+# V3.2 架构（多角色 + 前端重建）
+
+> 本节描述 **v3.2** 相对 v3.1 的架构变化。V3.1 中"未接入的第二套代码"（多角色 handler 与 middleware）在 V3.2 全部挂载启用；前端从 V2.0 静态 HTML 页面重建为 **Vite + Vue 3 SPA**；数据库新增 `users`/`operation_logs` 表并升级 `attendance_results` 审核字段。
+
+## 概述
+
+V3.2 的目标是**多角色考勤系统**（需求阶段 R1-R9）：
+
+- **多角色权限**：`hradmin`（人事管理员）/ `deptadmin`（部门管理员）/ `employee`（员工），前端路由守卫 + 后端接口双重鉴权
+- **审核工作流**：考勤结果单向流转 `pending_review → confirmed/disputed → submitted → locked`
+- **前端重建**：`client/src` 全新 Vite + Vue 3 SPA，功能复刻 V3.1（页面行为以 `v31-replica-reference.md` 为基线）
+- **计算引擎前置化**：考勤计算逻辑保留在前端 `shared/rules.js`（ES Module），后端 `/api/attendance/calculate` 负责落库
+
+```
+V3.1（前后端分离 + 静态 HTML）          V3.2（多角色 + SPA）
+┌──────────────────────┐              ┌────────────────────────────┐
+│ client/*.html (V2.0) │              │ client/ Vite+Vue3 SPA       │
+│ api-store.js         │     变为      │  src/views + src/shared     │
+│   │ fetch /api/*     │  ──────────► │  router 守卫(角色)          │
+└──────────┬───────────┘              └────────────┬───────────────┘
+           ▼                                      │ proxy /api (8002→8001)
+┌──────────────────────┐                          ▼
+│ server.py 手写 JWT    │     ┌────────────────────────────┐
+│ 部分 handler 未接入   │  │ middleware.py(PyJWT)统一认证 │
+│                      │   │ handlers/{auth,users,system, │
+└──────────────────────┘   │ rules,attendance,export,     │
+                            │ migrate} 全量挂载            │
+                            └────────────────────────────┘
+```
+
+## 技术栈（V3.2）
+
+| 层级 | 技术 | 用途 |
+|------|------|------|
+| 前端框架 | Vite 5 + Vue 3.5（Composition API `<script setup>`） | SPA 应用 |
+| 前端路由 | vue-router 4（`beforeEach` 守卫 + role 校验） | 页面导航 |
+| 前端 Excel | SheetJS（`public/lib/xlsx.min.js` 全局挂载） | 解析与导出 |
+| 前端构建 | `npm run build` → `client/dist` | 生产构建 |
+| 后端认证 | `middleware.py` PyJWT（HS256，24h） | 唯一认证基础（替代 V3.1 手写 HMAC） |
+| 数据存储 | SQLite，15 张表（camelCase 字段） | 持久化 |
+| 导出 | Python `openpyxl`（`handlers/export.py`） | XLSX 生成 |
+
+## 项目结构（V3.2）
+
+```
+attendance-v3/
+├── client/                      # 前端 SPA
+│   ├── vite.config.js           # dev 8002、proxy /api→127.0.0.1:8001、allowedHosts
+│   ├── index.html               # 挂载 /lib/xlsx.min.js + src/main.js
+│   ├── public/lib/xlsx.min.js   # SheetJS 全局脚本
+│   └── src/
+│       ├── main.js / App.vue    # 入口 + 顶层布局（topbar + 侧栏 + router-view）
+│       ├── router/index.js      # 路由表 + 登录/角色守卫 + 默认页
+│       ├── assets/bigsur.css    # 设计系统样式（与 V3.1 相同）
+│       ├── shared/              # ES Module 共享层（替代 V3.1 shared/*.js）
+│       │   ├── api.js           # fetch 封装（Bearer、401 清 token 跳登录）
+│       │   ├── store.js         # Store 接口 → /api/store/*
+│       │   ├── auth.js / constants.js / excel.js / matcher.js
+│       │   └── rules.js         # 考勤规则引擎（calculateMonth 全量迁移）
+│       ├── components/          # AppSidebar / AttendanceTable / AttendanceCalendar
+│       └── views/               # Login/SetupWizard/Settings/RulesSettings/
+│                                #   UserManage/Import/Attendance/MyAttendance/Export
+├── server/
+│   ├── server.py                # 路由 + store CRUD + 静态托管（单文件/端口 8001）
+│   ├── middleware.py            # PyJWT 生成/校验（generate_token/verify_token）
+│   ├── database.py              # 15 表 DDL + _migrate（V3.1 库升级）+ init_system
+│   └── handlers/
+│       ├── auth.py              # login / change-password / 锁定逻辑
+│       ├── users.py             # 用户 CRUD / 启禁用 / 重置密码
+│       ├── system.py            # version/status/config/admin-password/seed/reset
+│       ├── rules.py             # attendance_config / tolerance / holidays / work-schedule
+│       ├── attendance.py        # import / calculate / my / all / review / dept/submit / lock
+│       ├── export.py            # build_flat_report / build_calendar_report
+│       └── migrate.py           # V2.0 JSON 迁移（含失败回滚）
+└── tests/                       # 104 项测试（pytest + Node 驱动前端 rules）
+```
+
+## 多角色与权限模型
+
+| 角色 | 默认页 | 数据范围 | 主要权限 |
+|------|--------|----------|----------|
+| `hradmin` | `/attendance` | 全部 | 用户管理、规则/系统设置、全量考勤、审核/提交/锁定、seed/reset、迁移 |
+| `deptadmin` | `/attendance` | 本部门 | 查看本部门考勤、审核（确认/申诉）、提交本部门 |
+| `employee` | `/my` | 本人 | 查看本人考勤（`/api/attendance/my`） |
+
+后端鉴权辅助：`middleware._require_hradmin / _require_any_user`；员工访问 `/api/attendance/all`、`/api/users` 等返回 403。
+
+## 审核工作流
+
+```
+pending_review ──确认──► confirmed ──部门/人事提交──► submitted ──锁定──► locked
+      ▲                    │  ▲
+      └────────申诉────────┘  └──────────再次确认──────────┘
+```
+
+- 状态机定义在 `handlers/attendance.py handle_attendance_review` 的 `valid_transitions`
+- `submitted` / `locked` 为终态，不可再变更；锁定要求该月全部记录已 `submitted`
+- 变更记录写入 `operation_logs`
+
+## 后端路由（V3.2 全量）
+
+| 方法 | 路径 | 功能 | 角色 |
+|------|------|------|------|
+| POST | `/api/auth/login` | 登录（含 5 次失败锁 30 分钟）→ JWT | 公开 |
+| POST | `/api/auth/change-password` | 修改本人密码 | 登录 |
+| GET | `/api/auth/login-check` | token 有效性 | 登录 |
+| GET | `/api/users` / POST `/api/users` | 用户列表 / 新建 | hradmin |
+| PATCH | `/api/users/{id}/status` | 启/禁用 | hradmin |
+| POST | `/api/users/reset-password` | 重置密码 | hradmin |
+| GET | `/api/system/version` `/status` `/config` | 系统信息 | 登录/hradmin |
+| POST | `/api/system/seed-test-data` `/reset-data` | 测试数据 / 数据重置 | hradmin |
+| PUT | `/api/rules/config` `/tolerance`、GET/POST/DELETE `/api/rules/holidays` | 规则配置 | hradmin |
+| POST | `/api/attendance/import` | Excel 数据导入（6 类型） | 登录 |
+| POST | `/api/attendance/calculate` | 存储前端计算结果 | 登录 |
+| GET | `/api/attendance/my` `/all` `/summary` | 本人/全部/汇总 | 角色 |
+| PATCH | `/api/attendance/{id}/review` | 审核（确认/申诉） | deptadmin/hradmin |
+| PATCH | `/api/attendance/dept/submit` | 部门提交 | deptadmin/hradmin |
+| PATCH | `/api/attendance/lock` | 锁定整月 | hradmin |
+| POST | `/api/export/flat` `/calendar` | XLSX 导出 | 登录 |
+| POST | `/api/migrate` | V2.0 JSON 迁移（失败回滚） | hradmin |
+| GET/POST/DELETE | `/api/store/*` | 通用表 CRUD（含表名映射） | 登录 |
+
+`/api/store/*` 提供 **V3.1 前端表名映射**：`punch→punch_records`、`leave→leave_records`、`overtime→overtime_records`、`travel→travel_records`、`miss_punch→miss_punch_records`、`schedule→schedules`。
+
+## 数据流（V3.2）
+
+1. **导入**：前端 `Excel.parseExcelFile()` 解析 → `Store` → `POST /api/attendance/import` → 后端按类型落库（punch 导入前清空整表、`_sync_employees` 建立名册、schedule 需先有名册）
+2. **计算**：前端 `RulesEngine.calculateMonth()`（`shared/rules.js`）拉取数据、浏览器内计算 → `POST /api/attendance/calculate`（body 含 results + carry_over）→ 后端删除该月旧结果后批量落库
+3. **审核**：`PATCH /api/attendance/{id}/review`（确认/申诉）→ `dept/submit`（部门提交）→ `lock`（人事锁定）
+4. **导出**：前端读 `attendance_results` → `POST /api/export/flat|calendar` → openpyxl XLSX 下载
+
+## 与 v3.1 的主要变更
+
+| 方面 | v3.1 | v3.2 |
+|------|------|------|
+| 前端 | V2.0 静态 HTML（`*.html` + `shared/*.js`） | Vite + Vue3 SPA（`client/src`） |
+| 认证 | `server.py` 手写 HMAC JWT | `middleware.py` PyJWT 统一（`verify_token`） |
+| handler | 仅 `export.py` 挂载，其余未接入 | 7 个 handler + middleware 全量挂载 |
+| 角色 | 仅 admin | hradmin / deptadmin / employee |
+| 审核 | 无 | pending→confirmed→submitted→locked + operation_logs |
+| 数据库 | 13 张表 | +users / operation_logs；attendance_results +id/review 三字段 |
+| 计算落库 | `Store.clearTable + bulkPut` | `POST /api/attendance/calculate`（删除该月旧结果） |
+| 前端 dev | 后端直出静态页 | Vite dev 8002 + proxy `/api`→8001 |
+| 测试 | 部分与实现脱节 | 104 项全通过（含 Node 驱动前端 rules） |
+
+## V3.2 已知情况（如实记录）
+
+1. **计算在前端**：考勤判定逻辑位于前端 `client/src/shared/rules.js`，后端 `/api/attendance/calculate` 仅存储。测试通过 esbuild bundle 在 Node 中驱动该逻辑。
+2. **gitee 远程推送受限**：远程凭证仅 origin（GitHub）可用，gitee push 报 `Incorrect username or password`。
+3. **V3.1 静态页面不再由前端入口服务**：`client/` 目录下的 V3.1 `*.html` 页面保留但已非入口；生产/预览入口为 Vite 构建产物。

@@ -103,5 +103,5 @@
 ## 收尾
 
 - [ ] 提交时排除 `*.db`、`__pycache__/`、`.vite/`、`.vscode/`、`attendanceapp/test_conditional_format.xlsx`
-- [ ] 用 project-wiki skill 同步文档
-- [ ] 启动前后端预览验证完整链路
+- [x] 用 project-wiki skill 同步文档
+- [x] 启动前后端预览验证完整链路
