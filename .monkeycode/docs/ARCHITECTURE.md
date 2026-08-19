@@ -497,10 +497,21 @@ pending_review ──确认──► confirmed ──部门/人事提交──�
 
 ## 数据流（V3.2）
 
-1. **导入**：前端 `Excel.parseExcelFile()` 解析 → `Store` → `POST /api/attendance/import` → 后端按类型落库（punch 导入前清空整表、`_sync_employees` 建立名册、schedule 需先有名册）
+1. **导入**：前端 `Excel.parseExcelFile()` 解析 → `Store` → `POST /api/attendance/import` → 后端按类型落库（punch 导入前清空整表、`_sync_employees` 建立名册、记录 `settings.last_punch_month`、schedule 需先有名册）
 2. **计算**：前端 `RulesEngine.calculateMonth()`（`shared/rules.js`）拉取数据、浏览器内计算 → `POST /api/attendance/calculate`（body 含 results + carry_over）→ 后端删除该月旧结果后批量落库
 3. **审核**：`PATCH /api/attendance/{id}/review`（确认/申诉）→ `dept/submit`（部门提交）→ `lock`（人事锁定）
 4. **导出**：前端读 `attendance_results` → `POST /api/export/flat|calendar` → openpyxl XLSX 下载
+
+### 考勤视图默认月份（`detectDataMonth`）
+
+`AttendanceView.vue` 与旧版 `attendance.html` 的 `detectDataMonth()` 决定考勤计算页初始月份，优先级：
+
+1. `settings.last_punch_month`（最新打卡导入月份，优先）
+2. `raw_files` 最新 punch 文件名的 `/(\d{4})\s*年\s*(\d{1,2})\s*月/` 正则匹配（历史库回退）
+3. `punch_records` 中最后一条记录月份
+4. 当前月份（无任何打卡数据时）
+
+修改月份后 `watch(currentMonth)` → `loadResults()` 重新加载（结果为空且该月有打卡时自动触发 `runCalculation`）。
 
 ## 与 v3.1 的主要变更
 

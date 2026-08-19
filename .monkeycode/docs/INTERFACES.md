@@ -166,6 +166,7 @@
 | attendance_config | 考勤规则配置对象 |
 | config_updated_at | 配置更新时间戳 |
 | last_calc_{YYYY-MM} | 某月份最后计算时间 |
+| last_punch_month | 最近一次打卡导入数据的月份（`YYYY-MM`，取导入记录中最早日期） |
 
 #### export_templates - 导出模板
 ```js
@@ -418,6 +419,8 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 | `/api/attendance/leaves` `/travels` `/misses` `/overtime` `/data-month` | GET | 各类 OA 数据 | 登录 |
 
 `handle_attendance_calculate` 行为：删除该 `month` 旧结果 → 批量插入 `results`（含 review 三字段）→ 写入 `carry_over`。
+
+`handle_import` 行为（punch 类型）：导入前清空 `punch_records` 整表 → `_sync_employees` 建立名册 → 记录 `settings.last_punch_month`（records 中最早日期的 `YYYY-MM`，`ON CONFLICT` 更新）→ 写入 `raw_files`。
 
 ### 审核状态机（`valid_transitions`）
 
