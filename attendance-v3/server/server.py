@@ -209,13 +209,11 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         if path == '/' or path == '':
             path = '/index.html'
         client_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'client')
-        file_path = os.path.normpath(os.path.join(client_dir, path.lstrip('/')))
-        if not file_path.startswith(os.path.normpath(client_dir)):
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write(b'Not Found')
-            return
-        if os.path.isfile(file_path):
+        dist_dir = os.path.join(client_dir, 'dist')
+
+        def serve_file(file_path, mime_path):
+            if not os.path.isfile(file_path):
+                return False
             content_type_map = {
                 '.html': 'text/html; charset=utf-8',
                 '.css': 'text/css; charset=utf-8',
@@ -225,17 +223,37 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 '.jpg': 'image/jpeg',
                 '.ico': 'image/x-icon',
             }
-            ext = os.path.splitext(file_path)[1].lower()
+            ext = os.path.splitext(mime_path)[1].lower()
             ct = content_type_map.get(ext, 'application/octet-stream')
             self.send_response(200)
             self.send_header('Content-Type', ct)
             self.end_headers()
             with open(file_path, 'rb') as f:
                 self.wfile.write(f.read())
-        else:
-            self.send_response(302)
-            self.send_header('Location', '/index.html')
+            return True
+
+        # V3.2 SPA build: serve index.html and its assets from dist/
+        if path == '/index.html':
+            dist_index = os.path.join(dist_dir, 'index.html')
+            if serve_file(dist_index, path):
+                return
+        if path.startswith('/assets/') or path.startswith('/lib/'):
+            dist_file = os.path.normpath(os.path.join(dist_dir, path.lstrip('/')))
+            if dist_file.startswith(os.path.normpath(dist_dir)) and serve_file(dist_file, path):
+                return
+
+        # Legacy client pages
+        file_path = os.path.normpath(os.path.join(client_dir, path.lstrip('/')))
+        if not file_path.startswith(os.path.normpath(client_dir)):
+            self.send_response(404)
             self.end_headers()
+            self.wfile.write(b'Not Found')
+            return
+        if serve_file(file_path, path):
+            return
+        self.send_response(302)
+        self.send_header('Location', '/index.html')
+        self.end_headers()
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)

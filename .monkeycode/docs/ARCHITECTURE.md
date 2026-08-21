@@ -530,5 +530,6 @@ pending_review ──确认──► confirmed ──部门/人事提交──�
 ## V3.2 已知情况（如实记录）
 
 1. **计算在前端**：考勤判定逻辑位于前端 `client/src/shared/rules.js`，后端 `/api/attendance/calculate` 仅存储。测试通过 esbuild bundle 在 Node 中驱动该逻辑。
-2. **gitee 远程推送受限**：远程凭证仅 origin（GitHub）可用，gitee push 报 `Incorrect username or password`。
-3. **V3.1 静态页面不再由前端入口服务**：`client/` 目录下的 V3.1 `*.html` 页面保留但已非入口；生产/预览入口为 Vite 构建产物。
+2. **login.html 登录修复**：V3.1 遗留的"同步调用异步 `Auth.login()` 导致登录页永远报错"已修复（改为 `.then()` 处理）；`shared/auth.js` 现从 `data.data.user` 读取用户信息，并在 `need_change_password` 时写入 sessionStorage 供 SPA 守卫跳转 `/setup`。
+3. **静态托管（server.py）**：8001 `/` 与 `/index.html` 服务 `client/dist` 构建产物（V3.2 SPA 生产入口），`/assets/*`、`/lib/*` 从 dist 读取；V3.1 旧版 `login.html`/`attendance.html` 等页面保留，仍可通过显式路径访问。旧版 `login.html` 登录成功统一跳转 `/`（SPA 入口），由路由守卫决定默认页或强制 `/setup` 改密。
+4. **gitee 远程推送**：origin 为 GitHub；gitee 需使用 URL 内嵌 token 方式推送（`https://<user>:<token>@gitee.com/<org>/<repo>.git`），已配置于 `/root/.netrc`。

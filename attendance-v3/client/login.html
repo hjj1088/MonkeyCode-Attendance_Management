@@ -82,16 +82,21 @@
         loginBtn.disabled = true;
         loginBtn.textContent = '登录中...';
 
-        const result = Auth.login(username, password);
-
-        if (result.success) {
-          localStorage.setItem('attendance_user', username);
-          window.location.href = 'attendance.html';
-        } else {
-          showError(result.message || '账号或密码错误');
-          loginBtn.disabled = false;
-          loginBtn.textContent = '登录';
-        }
+        Auth.login(username, password).then(result => {
+          if (result.success) {
+            localStorage.setItem('attendance_user', username);
+            if (result.needChangePassword) {
+              sessionStorage.setItem('need_change_password', '1');
+            } else {
+              sessionStorage.removeItem('need_change_password');
+            }
+            window.location.href = '/';
+          } else {
+            showError(result.message || '账号或密码错误');
+            loginBtn.disabled = false;
+            loginBtn.textContent = '登录';
+          }
+        });
       }
 
       loginBtn.addEventListener('click', handleLogin);

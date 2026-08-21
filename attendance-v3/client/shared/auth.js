@@ -18,8 +18,9 @@ const Auth = {
       const data = await res.json();
       if (data.code === 0 && data.data && data.data.token) {
         sessionStorage.setItem('token', data.data.token);
-        sessionStorage.setItem('user', JSON.stringify({ username: data.data.username }));
-        return { success: true };
+        const u = data.data.user || {};
+        sessionStorage.setItem('user', JSON.stringify({ username: u.username, name: u.name, role: u.role, department: u.department }));
+        return { success: true, needChangePassword: !!data.data.need_change_password };
       }
       return { success: false, message: data.message || '登录失败' };
     } catch (e) {
