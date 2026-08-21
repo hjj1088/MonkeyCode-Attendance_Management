@@ -187,6 +187,17 @@ def handle_import(handler):
 
         if file_type == 'punch':
             _sync_employees(conn, records)
+            months = sorted({
+                str(r.get('date', ''))[:7]
+                for r in records
+                if str(r.get('date', ''))[:7]
+            })
+            if months:
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('last_punch_month', ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (months[0],)
+                )
 
         conn.execute(
             "INSERT INTO raw_files (fileName, fileType, recordCount, importTime) VALUES (?, ?, ?, datetime('now'))",
