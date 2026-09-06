@@ -113,7 +113,7 @@ DB.version(2).stores({
 7. **登录账号**：仅支持内置 admin/admin123 单一账号
 8. **跨页功能**：v2.0 的 bigsur.css 和 layout.js 与 v1.0 (attendance/) 页面不兼容，两套代码独立部署
 9. **Docker 镜像**：构建于 `python:3.12-slim` 基础镜像，仅支持 amd64 架构，无 arm64 支持。旧版 Docker daemon 的 docker-proxy 偶发僵尸状态，需 `systemctl restart docker` 恢复
-10. **条件格式兼容性**：迟到/早退条件格式依赖 Excel 原生公式（`TIMEVALUE`/`MOD(ROW())`），部分非 Microsoft 软件（如 WPS 旧版）可能不完全支持
+10. **条件格式兼容性**：迟到/早退依赖 Excel 原生公式（`ISNUMBER`/`MOD(ROW())`/`TIME()`）。打卡必须是 Excel 时间值，纯文本 `"08:30"` 上 `ISNUMBER` 为假，不会标红。部分非 Microsoft 软件（如 WPS 旧版）对条件格式支持不完整
 
 ---
 

@@ -40,8 +40,44 @@ Excel 文件的全生命周期处理：解析上传、类型识别、数据标�
 | 方法 | 类型 | 说明 |
 |------|------|------|
 | `_apiExport(endpoint, data, filename)` | `async` | 内部 fetch 封装，POST JSON 到 Python 后端，接收 XLSX blob 并触发浏览器下载 |
-| `exportToExcel(records, template, filename)` | `async` | Flat 格式导出。从 `settings.attendance_config` 读取 `workStartTime`/`workEndTime` 并通过 API 传参，后端据此生成迟到/早退条件格式规则 |
-| `exportCalendarReport(targetMonth, fields)` | `async` | 日历月报格式导出。同上读取作息时间并传参到 `/api/export/calendar` |
+| `_normalizeWorkTime(val)` | sync | 把 `HH:MM` / `HH:MM:SS` 规范成 `HH:MM` |
+| `_getWorkTimes()` | `async` | 每次导出读 `Store.getByKey('settings','attendance_config')`，取 `.value.workStartTime` / `workEndTime`，缺省 `08:30`/`17:30` |
+| `exportToExcel(records, template, filename)` | `async` | Flat 导出。调用 `_getWorkTimes()` 后 POST `/api/export/flat` |
+| `exportCalendarReport(targetMonth, fields)` | `async` | 日历月报导出。同上取作息后 POST `/api/export/calendar` |
+
+V3.2 实现位于 `attendance-v3/client/src/shared/excel.js`。`getByKey` 返回 `{key, value}`，必须解包 `.value`；直接读 `config.workStartTime` 得到空串，后端会落到默认 08:30。
+
+## 条件格式规则
+
+### 迟到/早退时间异常检测
+
+导出 XLSX 对迟到/早退打卡标红字。规则以当前 `handlers/export.py` 为准：
+
+迟到：签到 > `workStartTime`，红字。早退：签退 < `workEndTime`，红字。颜色来自 `RED_FONT`（`#FF0000`），无白字、无红底色阶。
+
+日历月报对 `D3:{lastCol}{lastRow}` 挂 2 条规则：
+
+```
+AND(MOD(ROW(),2)=1,ISNUMBER(D3),D3>TIME(h,m,0))
+AND(MOD(ROW(),2)=0,ISNUMBER(D3),D3<TIME(h,m,0))
+```
+
+平铺报表对签到/签退列逐列挂：
+
+```
+AND(ISNUMBER(D2),D2>TIME(h,m,0))
+AND(ISNUMBER(F2),F2<TIME(h,m,0))
+```
+
+### 条件格式应用流程
+
+1. 前端 `Excel._getWorkTimes()`：`Store.getByKey('settings','attendance_config')`，解包 `.value`，`_normalizeWorkTime` 去掉秒。
+2. POST `/api/export/calendar` 或 `/api/export/flat`，带 `startTime`/`endTime`。
+3. 后端 `_resolve_work_times()`：请求参数 → `settings.attendance_config` → `08:30`/`17:30`。
+4. `_write_cell_value()` 把 `HH:MM` 写成 Excel `datetime.time`（`HH:MM`），`ISNUMBER` 才能命中。
+5. 生成时直接给迟到/早退单元格 `RED_FONT`，再挂 FormulaRule。
+
+详见 [专有概念/导出模板系统.md](../专有概念/导出模板系统.md)。
 
 ## 排班表解析细节
 
@@ -102,7 +138,7 @@ Excel 文件的全生命周期处理：解析上传、类型识别、数据标�
 2. 从 IndexedDB 查询指定月的 `attendance_results`，无结果时抛错
 3. 从 IndexedDB 查询对应年份的 `schedules`，筛选当月排班
 4. 从 IndexedDB 查询全部 `holidays`，筛选当月节假日
-5. 从 `settings.attendance_config` 读取 `workStartTime`/`workEndTime`
+5. `Excel._getWorkTimes()` 读 `attendance_config.value` 的 `workStartTime`/`workEndTime`
 6. 将 `{ targetMonth, fields, results, schedules, holidays, startTime, endTime }` 发往 `/api/export/calendar`
 7. 后端生成日历月报 XLSX（部门分组、双行表头、单元格着色 + 条件格式规则等样式由 Python openpyxl 完成）
 

@@ -130,7 +130,7 @@ export_server.py (独立进程，HTTP API + 静态文件)
 3. **导出阶段** (`export.html`)：
    - 用户编辑导出模板字段（19个可选字段，含工作时长）
    - Flat 模式：前端准备 records + template -> POST `/api/export/flat` -> Python openpyxl 生成 XLSX（含条件格式迟到/早退红色标记）
-   - 月报模式：前端读取 results + schedules + holidays -> POST `/api/export/calendar` -> Python 生成日历格式 XLSX（按部门分组、上午/下午双行、直接样式+2条全局 FormulaRule 双重条件格式着色）
+    - 月报模式：前端读取 results + schedules + holidays + 考勤时段配置 -> POST `/api/export/calendar` -> Python 生成日历 XLSX（部门分组、上午/下午双行；打卡写成 Excel 时间；直接红字 + 2 条 `ISNUMBER` FormulaRule）
 
 ## 页面导航
 
@@ -224,7 +224,7 @@ v2.0 新增 `shared/init.js` 兼容桥接层，为旧版 API 提供映射：
 | 部署 | 纯手动启动 | 支持 Docker 容器化 + GitHub Actions CI/CD |
 | 页面布局 | 单栏 `max-w-7xl` | 侧边栏 + 主内容区 `app-shell` |
 | 登录页 | 顶部导航式 | 居中毛玻璃卡片 |
-| 导出条件格式 | 无 | 直接单元格样式 + 全局2条 FormulaRule（日历）/按列规则（平铺）双重保障 |
+| 导出条件格式 | 无 | 打卡写成 Excel 时间值；直接红字 + 日历 2 条 / 平铺按列 `ISNUMBER` FormulaRule |
 | 加班追溯 | OA 加班记录无法按日期匹配 | 解析"加班起止时间"字段，startTime 正确填充 |
 
 ## 版本

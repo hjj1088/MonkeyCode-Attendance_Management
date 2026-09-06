@@ -267,7 +267,7 @@ RulesEngine.getResultDetail(eno, date)   // 获取某天详情 (含关联源记�
 | `/api/export/calendar` | POST | `{targetMonth: "YYYY-MM", fields: array, results: array, schedules: array, holidays: array, startTime: string, endTime: string}` | 二进制 XLSX |
 | `/*` | OPTIONS | — | 204, `Access-Control-Allow-Origin: *` (CORS 预检) |
 
-> `GET /health` 为 v2.0.3 新增端点，返回服务版本信息（Git SHA、构建时间、Python 版本）用于验证 Docker 镜像版本。`startTime`/`endTime` 为选填参数，格式 `HH:MM`（如 `08:30`/`17:30`）。传入后用于生成迟到/早退条件格式规则；未传入时自动从排班数据或打卡记录中提取，兜底默认值为 `08:30`/`17:30`。
+> `GET /health` 为 v2.0.3 新增端点，返回服务版本信息（Git SHA、构建时间、Python 版本）用于验证 Docker 镜像版本。`startTime`/`endTime` 选填，格式 `HH:MM` 或 `HH:MM:SS`（后端截到 `HH:MM`）。V3.2 每次导出由前端从 `settings.attendance_config` 读取后传入；未传入时后端再读同一配置，兜底 `08:30`/`17:30`。
 
 ---
 
@@ -320,7 +320,7 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 | `/api/export/flat` | POST | `{records, template:{fields:[{label,field}]}, filename, startTime, endTime}` | 二进制 XLSX |
 | `/api/export/calendar` | POST | `{targetMonth:"YYYY-MM", fields, results, schedules, holidays, startTime, endTime}` | 二进制 XLSX |
 
-响应头 `Content-Disposition` 使用 `filename*=UTF-8''{urlencoded}`（RFC 5987）以支持中文文件名。逻辑与 V2.0 `export_server.py` 完全一致（`build_flat_report` / `build_calendar_report`，见 [模块/export-server-模块.md](./模块/export-server-模块.md) 与 [模块/V3.1-后端服务-模块.md](./模块/V3.1-后端服务-模块.md)）。
+响应头 `Content-Disposition` 使用 `filename*=UTF-8''{urlencoded}`（RFC 5987）以支持中文文件名。V3.2 实现见 `attendance-v3/server/handlers/export.py`：打卡写成 Excel 时间值，条件格式用 `ISNUMBER` + `TIME()`，作息每次从 `attendance_config` 读取（见 [专有概念/导出模板系统.md](./专有概念/导出模板系统.md)）。
 
 ## SQLite 数据库（V3.1）
 

@@ -53,7 +53,7 @@ v2.0.3 新增。返回 JSON 格式的服务版本和运行状态信息，用于�
 }
 ```
 
-`startTime`/`endTime` 为选填参数，用于生成迟到/早退条件格式规则。未传入时从数据中自动提取，兜底默认 `08:30`/`17:30`。
+`startTime`/`endTime` 选填。V3.2（`attendance-v3/server/handlers/export.py`）每次导出由前端从 `settings.attendance_config` 传入；未传入时后端再读该配置，兜底 `08:30`/`17:30`。V2.0 `attendanceapp/export_server.py` 未传入时从排班/打卡记录提取。
 
 返回：`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`，触发浏览器下载。
 
@@ -73,7 +73,7 @@ v2.0.3 新增。返回 JSON 格式的服务版本和运行状态信息，用于�
 }
 ```
 
-`startTime`/`endTime` 选填，同上用于条件格式生成，兜底默认 `08:30`/`17:30`。
+`startTime`/`endTime` 选填，来源同上。
 
 返回：同上 MIME 类型，文件名自动生成为 `考勤明细_{targetMonth}.xlsx`。
 
@@ -95,12 +95,12 @@ CORS 预检：返回 `204 No Content`，允许 `POST, OPTIONS` 方法及 `Conten
 4. **合并单元格**：A1:A2（日期）、B1:B2（排班）、C1:C2（打卡时间）、部门表头按员工数合并
 5. **休息日处理**：排班休息日或假期休息日整行填充 `GRAY_FILL`；在此之前先通过 `_get_cell_style()` 保留 OA 状态字体颜色（蓝色），然后再覆盖灰色填充
 6. **假期标注**：节假日日期在排班列显示假期名称（如"端午节"），替代默认"休息日"/"工作日"
-7. **作息时间预处理**：从 schedules 提取 `schedule_by_date` 映射 `{date_str: {workStartTime, workEndTime}}`，供迟到/早退判定使用
-8. **迟到/早退直接样式**：AM 行签到时间通过 `_time_to_minutes()` 与日期的 `workStartTime` 做数值比较，大于则 `RED_FONT`；PM 行签退时间与 `workEndTime` 比较，小于则 `RED_FONT`
-9. **全局条件格式**：对整体数据范围生成 2 条 `FormulaRule`：
-   - 迟到：`MOD(ROW(),2)=1`（奇数行=AM）× `TIMEVALUE(D3) > TIME(startTime)`
-   - 早退：`MOD(ROW(),2)=0`（偶数行=PM）× `TIMEVALUE(D3) < TIME(endTime)`
-   公式中 `D3` 为范围的左上角相对引用，Excel 自动对范围内每个单元格做偏移适配
+7. **作息时间**：V3.2 用 `_resolve_work_times()` 读请求参数或 `attendance_config`，不再用排班表逐日覆盖迟到/早退阈值
+8. **迟到/早退直接样式**：AM 签到、PM 签退与 `_st`/`_et` 分钟比较，异常则 `RED_FONT`。打卡由 `_write_cell_value()` 写成 Excel `datetime.time`
+9. **全局条件格式**（V3.2）：
+   - 迟到：`AND(MOD(ROW(),2)=1,ISNUMBER(D3),D3>TIME(h,m,0))`
+   - 早退：`AND(MOD(ROW(),2)=0,ISNUMBER(D3),D3<TIME(h,m,0))`
+   `D3` 为范围左上角相对引用
 10. **列宽自适应**：CJK 字符按 2 倍宽度估算，上限 30
 
 ### build_flat_report(records, template, filename)
@@ -119,7 +119,7 @@ CORS 预检：返回 `204 No Content`，允许 `POST, OPTIONS` 方法及 `Conten
    'no_sign_in' → '上班未打卡', 'no_sign_out' → '下班未打卡'
    ```
 4. 通过 `_get_cell_style()` 为异常状态单元格着色
-5. 对签到/签退列（`field == 'signIn'/'signOut'` 或标签含 `签到`/`签退`）对应的单元格用 `_time_to_minutes()` 做数值时间比较：签到 > 上班时间 → `RED_FONT`，签退 < 下班时间 → `RED_FONT`；同时为这些列按列生成条件格式 `FormulaRule`
+5. 签到/签退列写入 Excel 时间值；`_time_to_minutes()` 比较后迟到/早退 `RED_FONT`；按列挂 `AND(ISNUMBER(cell),cell>TIME(...))` / `cell<TIME(...)`
 6. 列宽自适应，上限 40
 
 ### _get_cell_style(val)
@@ -136,7 +136,7 @@ v2.0.2 将正则从 `请假|出差|加班|补卡` 改为 `假|休|出差|加班|
 
 ### _is_time_val(val)
 
-模块级工具函数，判断一个值是否为有效时间格式（`HH:MM` 或 `H:MM`，正则 `^\d{1,2}:\d{2}$`）。用于条件格式生成和迟到/早退的时间判断。
+V3.2 经 `_normalize_time()`，接受 `HH:MM` 或 `HH:MM:SS`（截到分钟）。用于迟到/早退判定。
 
 ### _time_to_minutes(t)
 
@@ -183,8 +183,8 @@ v2.0.2 新增迟到/早退的 Excel 条件格式，采用**直接单元格样式
 
 | 规则 | 公式 | 效果 |
 |------|------|------|
-| 迟到 | `AND(MOD(ROW(),2)=1, D3<>"", NOT(ISERROR(TIMEVALUE(D3))), TIMEVALUE(D3)>TIME(h,m,0))` | 奇数行（AM）时间 > 上班时间 → 红字 |
-| 早退 | `AND(MOD(ROW(),2)=0, D3<>"", NOT(ISERROR(TIMEVALUE(D3))), TIMEVALUE(D3)<TIME(h,m,0))` | 偶数行（PM）时间 < 下班时间 → 红字 |
+| 迟到 | `AND(MOD(ROW(),2)=1,ISNUMBER(D3),D3>TIME(h,m,0))` | 奇数行（AM）时间 > 上班时间 → 红字 |
+| 早退 | `AND(MOD(ROW(),2)=0,ISNUMBER(D3),D3<TIME(h,m,0))` | 偶数行（PM）时间 < 下班时间 → 红字 |
 
 ### 平铺报表：按列规则
 
@@ -192,18 +192,19 @@ v2.0.2 新增迟到/早退的 Excel 条件格式，采用**直接单元格样式
 
 | 规则 | 公式 | 效果 |
 |------|------|------|
-| 迟到 | `AND(D2<>"", NOT(ISERROR(TIMEVALUE(D2))), TIMEVALUE(D2)>TIME(h,m,0))` | 签到列时间 > 上班时间 → 红字 |
-| 早退 | `AND(F2<>"", NOT(ISERROR(TIMEVALUE(F2))), TIMEVALUE(F2)<TIME(h,m,0))` | 签退列时间 < 下班时间 → 红字 |
+| 迟到 | `AND(ISNUMBER(D2),D2>TIME(h,m,0))` | 签到列时间 > 上班时间 → 红字 |
+| 早退 | `AND(ISNUMBER(F2),F2<TIME(h,m,0))` | 签退列时间 < 下班时间 → 红字 |
 
 ### 作息时间来源
 
-`startTime`/`endTime` 优先级：前端传入 > 排班 schedules 数据提取 > 兜底默认 `08:30`/`17:30`。
+V3.2 优先级：请求体 `startTime`/`endTime`（前端每次从考勤时段配置读取）→ 后端 `attendance_config` → `08:30`/`17:30`。
 
 ### 关键设计要点
 
-1. **`D3<>""` 替代 `ISTEXT(D3)`**：因所有数据单元格已设 `number_format = '@'`（文本格式），空单元格也满足 `ISTEXT()` 导致误判，改用非空检查
-2. **直接样式用 `_time_to_minutes()` 数值比较**：避免 Python 字符串字典序误判（如 `"17:40" > "17:30"` 在字符串比较中为 `True` 但并非早退）
-3. **日历 2 条规则 vs 逐列 62 条**：范围 `D3:AH64` 统一应用，`MOD(ROW())` 区分 AM/PM，`D3` 相对引用自动适配各列各行的单元格
+1. **打卡写成 Excel 时间**：`_write_cell_value()` 用 `datetime.time` + `HH:MM`。文本 `"08:30"` 上 `ISNUMBER` 为假，旧公式不标红
+2. **直接样式用 `_time_to_minutes()`**：避免字符串字典序误判
+3. **日历 2 条规则**：范围 `D3:{last_col}{last_row}`，`MOD(ROW())` 分 AM/PM，`D3` 相对引用
+4. **非时间格**（缺勤/请假/公休）仍为文本 `@`，条件格式跳过
 
 ## 样式常量
 
@@ -211,7 +212,8 @@ v2.0.2 新增迟到/早退的 Excel 条件格式，采用**直接单元格样式
 RED_FONT   = Font(color='FFFF0000')                                    # 红色，迟到/早退
 BLUE_FONT  = Font(color='FF0066CC')                                    # 蓝色，OA 审批
 GRAY_FILL  = PatternFill(start_color='FFD9D9D9', end_color='FFD9D9D9', fill_type='solid')  # 灰色背景，休息日
-TEXT_FMT   = '@'                                                        # 文本格式，防止 Excel 将时间值自动转为时间序列号
+TEXT_FMT   = '@'                                                        # 非时间格（缺勤/请假等）文本格式
+TIME_FMT   = 'HH:MM'                                                    # 打卡时间格，供 ISNUMBER 条件格式命中
 THIN_BORDER = Border(left=..., right=..., top=..., bottom=..., style='thin')  # 细边框
 CENTER_ALIGN = Alignment(horizontal='center', vertical='center')        # 居中对齐
 ```
