@@ -1,43 +1,34 @@
 # auth 模块
 
-**文件**：`shared/auth.js`
+**文件（V2.0）**：`shared/auth.js`  
+**文件（V3.2）**：`attendance-v3/client/src/shared/auth.js`
 
 ## 职能
 
-简单的浏览器端认证系统，通过 `localStorage` 实现登录状态持久化。
+V2.0：浏览器端 `localStorage` 登录状态。  
+V3.2：调用后端 JWT，`sessionStorage` 存 `token` + `user`。
 
-## API
+## V3.2 API
 
-### `Auth.isLoggedIn()`
+| 方法 | 说明 |
+|------|------|
+| `isLoggedIn()` | `sessionStorage.token` 是否存在 |
+| `getUser()` / `getRole()` / `getUsername()` / `getDepartment()` | 读 `sessionStorage.user` |
+| `login(username, password)` | `POST /api/auth/login`，成功写 token/user，返回 `{success, needChangePassword}` |
+| `logout()` | 清 session，跳 `login` |
 
-检查 localStorage 中 `attendance_auth` 键是否为 `'true'`。
+页面守卫在 `router/index.js` 的 `beforeEach`，不再用 `Auth.requireAuth()`。
 
-### `Auth.login(username, password)`
+无 token：`defaultPath()` → `/login`。`admin` 默认密码触发 `need_change_password` → `/setup`。
 
-验证账号密码。默认凭据：`admin / admin123`。
+后端锁定：连错 5 次锁 24 小时（`locked_until`）；`last_failed_login` 超 1 天清零。见 [V3.2-多角色与审核工作流](../专有概念/V3.2-多角色与审核工作流.md)。
 
-返回 `{ success: true }` 或 `{ success: false, message: '账号或密码错误' }`。
+## V2.0 API（对照）
 
-### `Auth.logout()`
+`Auth.isLoggedIn()` 检查 `localStorage.attendance_auth`。`Auth.login` 前端硬编码凭据。`Auth.requireAuth()` 未登录跳 `index.html`。
 
-清除 localStorage 中的认证状态，跳转回 `index.html` 登录页。
+## 安全说明（V3.2）
 
-### `Auth.requireAuth()`
-
-页面守卫函数。若未登录则 `window.location.href = 'index.html'`。
-
-## 使用方式
-
-所有功能页在 `<script>` 顶部调用：
-
-```js
-Auth.requireAuth();
-```
-
-## 安全说明
-
-这仅是一个前端轻量级认证，不适用于需要强安全认证的场景：
-- 凭据以明文存储在前端代码中
-- 认证状态存储在浏览器 localStorage
-- 无 token、session、加密机制
-- 清除浏览器数据可绕过认证
+- 密码 bcrypt 存 SQLite，JWT HS256 24h
+- token 在 `sessionStorage`，关标签失效
+- 角色以后端 token payload 为准，前端 `meta.roles` 只拦导航

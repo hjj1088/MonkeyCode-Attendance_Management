@@ -22,9 +22,10 @@ Excel 文件的全生命周期处理：解析上传、类型识别、数据标�
 | 方法 | 说明 |
 |------|------|
 | `_hasFill(cell)` | 判断单元格是否有背景填充色 |
-| `parseScheduleSheet(ws, sheetName)` | 解析单个月份排班 Sheet |
+| `parseScheduleSheet(ws, sheetName)` | 解析单个月份排班 Sheet。V3.2 必须 `await this.sheetToArray(ws)`，漏 await 则 0 条 |
 | `isScheduleWorkbook(wb)` | 判断是否为排班工作簿 |
 | `parseAllScheduleSheets(wb)` | 解析全部排班 Sheet |
+| `flattenScheduleDays(monthRecords)` | V3.2：把月×员工 `workDays` 展开为按天行。导入页条数/预览用天数；入库仍传月对象 |
 
 ### 识别相关
 

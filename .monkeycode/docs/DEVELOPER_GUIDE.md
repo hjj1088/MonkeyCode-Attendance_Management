@@ -193,3 +193,46 @@ python3 /workspace/attendance-v3/server/server.py
 ```
 
 两套代码独立部署、数据相互隔离（V2.0 数据在浏览器 IndexedDB，V3.1 数据在后端 SQLite），可并行运行对比验证。
+
+---
+
+# V3.2 开发指南（Vite SPA + 多角色）
+
+> 当前开发以 `attendance-v3/` 的 Vite + Vue 3 SPA 为准。完整部署见 [DEPLOYMENT_V3.2.md](./DEPLOYMENT_V3.2.md)。
+
+## 环境搭建（V3.2）
+
+```bash
+# 终端 1：后端 8001（API + dist 静态托管）
+cd /workspace/attendance-v3
+pip install -r requirements.txt
+python3 server/server.py
+
+# 终端 2：前端热更新 8002（/api 代理到 8001）
+cd /workspace/attendance-v3/client
+npm ci
+npm run dev
+```
+
+开发预览走 `http://127.0.0.1:8002`。生产预览走 `http://127.0.0.1:8001`（需先 `npm run build` 生成 `client/dist`）。
+
+默认管理员：`admin` / `admin123`，角色 `superadmin`，首次登录 `need_change_password`。种子用户密码见测试约定，文档不写真实业务密码。
+
+## 前端约定（V3.2）
+
+- 入口：`client/index.html` → `src/main.js`。`router.isReady()` 后再 `mount`。
+- 布局：`App.vue` 的 `showLayout` 要求路由已匹配且 `noLayout !== true`。`/login` `/setup` 无侧栏。
+- 路由：`src/router/index.js`。无 token 时 `defaultPath()` 直跳 `/login`，不经 `/attendance`。
+- 认证：`src/shared/auth.js`，token + user 在 `sessionStorage`。
+- Vite：`vite.config.js` `appType: 'spa'` + `spaHtmlFallback()`。刷新 `/attendance` 必须回 `index.html`，否则命中旧 `client/attendance.html`。
+- 计算：`src/shared/rules.js`，`RULES_VERSION = '1.0.28'`。后端只存结果。
+- 排班：`parseScheduleSheet` 必须 `await sheetToArray`。界面按天计数（`flattenScheduleDays`），入库仍按月对象。
+- 空结果：`configChanged` 仅有计算结果时亮；有打卡未计算只留「尚未计算」。
+- 分页：考勤页、用户管理页固定 7 槽、按钮等宽、`N / M` 等宽数字。
+
+## 调试（V3.2）
+
+- 确认 SPA：`curl -s http://127.0.0.1:8002/attendance` 应返回含 `#app` 的 V3.2 `index.html`，标题「考勤管理系统」。
+- 8001 无扩展名路径同样回退 dist SPA。
+- 登录锁定：`users.login_attempts` / `locked_until` / `last_failed_login`。连错 5 次锁 24 小时；距上次失败超 1 天清零。
+- 测试：`attendance-v3/tests/`，`conftest.py` 的 `e2e_server` 用独立 DB 与端口。

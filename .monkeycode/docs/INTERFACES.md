@@ -343,8 +343,8 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 - **认证**：除 `/api/auth/login`、`/api/auth/login-check`、`/api/system/version` 外，一律 `Authorization: Bearer <token>`（PyJWT，HS256，24h）
 - **登录响应**：`{code:0, data:{token, user:{id,username,name,department,role}, need_change_password}}`
 - **默认账号**：`admin` / `admin123`（bcrypt），密码仍为默认值时登录返回 `need_change_password: true`，前端引导强制改密
-- **登录锁定**：连续 5 次密码错误锁定 30 分钟（`users.login_attempts` / `locked_until`）
-- **角色**：`hradmin` / `deptadmin` / `employee`；`middleware.py` 提供 `_require_hradmin` / `_require_any_user` 鉴权
+- **登录锁定**：连续 5 次密码错误锁定 24 小时（`users.login_attempts` / `locked_until` = now+1 天）。距 `last_failed_login` 超过 1 天，`clear_stale_attempts` 清零计数。锁定过期由 `clear_locked_if_expired` 清除。
+- **角色**：`superadmin` / `hradmin` / `deptadmin` / `employee`。鉴权：`users.py`/`rules.py` `_require_admin`（hradmin+superadmin）、`system.py`/`migrate.py` `_require_superadmin`、`attendance.py` `_require_any_user`
 
 ## 新增数据库表
 
@@ -356,11 +356,13 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 | username | TEXT UNIQUE | 登录名 |
 | name | TEXT | 姓名 |
 | department | TEXT | 部门 |
-| role | TEXT | hradmin/deptadmin/employee |
+| role | TEXT | superadmin/hradmin/deptadmin/employee |
+| employee_no | TEXT | 关联考勤号 |
 | password_hash | TEXT | bcrypt 哈希 |
 | enabled | INTEGER | 1 启用 / 0 禁用 |
 | login_attempts | INTEGER | 连续失败次数 |
-| locked_until | TEXT | 锁定截止时间 |
+| locked_until | TEXT | 锁定截止时间（ISO，满 5 次 = now+1 天） |
+| last_failed_login | TEXT | 最近失败时间；超 1 天清零计数 |
 | created_at / updated_at | TEXT | 时间戳 |
 
 ### operation_logs（V3.2）
@@ -383,24 +385,26 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 |------|------|--------|------|
 | `/api/auth/login` | POST | `{username, password}` | 公开 |
 | `/api/auth/change-password` | POST | `{old_password, new_password}` | 登录 |
-| `/api/users` | GET/POST | POST `{username,name,department,role,password}` | hradmin |
-| `/api/users/{id}/status` | PATCH | `{enabled:0\|1}` | hradmin |
-| `/api/users/reset-password` | POST | `{username, new_password}` | hradmin |
+| `/api/users` | GET/POST | POST `{username,name,department,role,password}` | hradmin/superadmin |
+| `/api/users/{id}` | PUT | 更新字段 | hradmin/superadmin |
+| `/api/users/{id}/status` | PATCH | `{enabled:0\|1}` | hradmin/superadmin |
+| `/api/users/reset-password` | POST | `{username, new_password}` | hradmin/superadmin |
+| `/api/users/import-from-punch` | POST | 从 employees/punch_records 建 employee 账号 | hradmin/superadmin |
 
 ## 系统与规则 API（V3.2）
 
 | 端点 | 方法 | 请求体 | 角色 |
 |------|------|--------|------|
 | `/api/system/version` `/config` | GET | — | 登录 |
-| `/api/system/status` | GET | —（含各表行数） | hradmin |
-| `/api/system/admin-password` | PUT | `{current_password, new_password}` | hradmin |
-| `/api/system/check-default-password` | GET | — | hradmin |
-| `/api/system/seed-test-data` | POST | — | hradmin |
-| `/api/system/reset-data` | POST | —（清业务表，保留 users/settings） | hradmin |
-| `/api/rules/config` | GET/PUT | 考勤时段 | hradmin |
-| `/api/rules/tolerance` | GET/PUT | 容错规则 | hradmin |
-| `/api/rules/holidays` | GET/POST/DELETE | 假期管理 | hradmin |
-| `/api/rules/work-schedule` | GET | 排班信息 | hradmin |
+| `/api/system/status` | GET | —（含各表行数） | superadmin |
+| `/api/system/admin-password` | PUT | `{current_password, new_password}` | superadmin |
+| `/api/system/check-default-password` | GET | — | superadmin |
+| `/api/system/seed-test-data` | POST | — | superadmin |
+| `/api/system/reset-data` | POST | —（清业务表，保留 users/settings） | superadmin |
+| `/api/rules/config` | GET/PUT | 考勤时段 | hradmin/superadmin |
+| `/api/rules/tolerance` | GET/PUT | 容错规则 | hradmin/superadmin |
+| `/api/rules/holidays` | GET/POST/DELETE | 假期管理 | hradmin/superadmin |
+| `/api/rules/work-schedule` | GET | 排班信息 | hradmin/superadmin |
 
 `rules` 配置统一存 `settings.attendance_config` 单键（camelCase：workStartTime/workEndTime/lateThreshold/earlyThreshold/graceTimes/graceMinutes），与 V3.1 前端契约一致。
 
@@ -411,11 +415,11 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 | `/api/attendance/import` | POST | `{type, records, file_name}`（6 类型） | 登录 |
 | `/api/attendance/calculate` | POST | `{results, month, carry_over}` | 登录 |
 | `/api/attendance/my?month=` | GET | —（按 `name`+month 查询本人） | 登录 |
-| `/api/attendance/all?month=` | GET | —（deptadmin 过滤本部门，employee 403） | deptadmin/hradmin |
-| `/api/attendance/summary` | GET | —（按部门/状态汇总） | hradmin |
-| `/api/attendance/{id}/review` | PATCH | `{review_status}` | deptadmin/hradmin |
-| `/api/attendance/dept/submit` | PATCH | `{month}`（hradmin 提交全部，deptadmin 提交本部门） | deptadmin/hradmin |
-| `/api/attendance/lock` | PATCH | `{month}`（要求该月全部 submitted） | hradmin |
+| `/api/attendance/all?month=` | GET | —（deptadmin 过滤本部门，employee 403） | deptadmin/hradmin/superadmin |
+| `/api/attendance/summary` | GET | —（按部门/状态汇总） | hradmin/superadmin |
+| `/api/attendance/{id}/review` | PATCH | `{review_status}` | deptadmin/hradmin/superadmin |
+| `/api/attendance/dept/submit` | PATCH | `{month}`（hradmin/superadmin 提交全部，deptadmin 提交本部门） | deptadmin/hradmin/superadmin |
+| `/api/attendance/lock` | PATCH | `{month}`（要求该月全部 submitted） | hradmin/superadmin |
 | `/api/attendance/leaves` `/travels` `/misses` `/overtime` `/data-month` | GET | 各类 OA 数据 | 登录 |
 
 `handle_attendance_calculate` 行为：删除该 `month` 旧结果 → 批量插入 `results`（含 review 三字段）→ 写入 `carry_over`。
@@ -433,7 +437,7 @@ submitted / locked → （终态，不可变更）
 
 ## 迁移 API（V3.2）
 
-`POST /api/migrate`（hradmin）：请求体为 V2.0 导出 JSON（`{employee, punch, leave, schedule, holiday, settings, attendance_results, carry_over}`），按字段映射 `INSERT OR IGNORE` 落库；单条失败记入 `report.errors`，整体异常时 `conn.rollback()` 并报告"已回滚"。注意：迁移前 `None` 值必须转为 `''`，否则违反 NOT NULL 约束会被 `INSERT OR IGNORE` 静默忽略（实际零落库）。
+`POST /api/migrate`（仅 superadmin）：请求体为 V2.0 导出 JSON（`{employee, punch, leave, schedule, holiday, settings, attendance_results, carry_over}`），按字段映射 `INSERT OR IGNORE` 落库；单条失败记入 `report.errors`，整体异常时 `conn.rollback()` 并报告"已回滚"。迁移前 `None` 必须转为 `''`，否则 NOT NULL 冲突会被 `INSERT OR IGNORE` 静默忽略（实际零落库）。
 
 ## store 表名映射（V3.2）
 
@@ -454,3 +458,21 @@ submitted / locked → （终态，不可变更）
 
 - `json_serialize` 对 `value`（settings）、`workDays`（schedules）、`fields`（export_templates）、`source*Ids`（attendance_results）自动 `json.loads` 反序列化——**前端取到的 settings.value 是对象**，测试 mock 与断言需按对象处理
 - 布尔列（isWorkday/isHoliday/isDefault/absent/isRestDay）序列化为 `bool`
+
+## 前端认证与布局（V3.2 SPA）
+
+`client/src/shared/auth.js`：JWT 存 `sessionStorage.token`，用户对象存 `sessionStorage.user`。`login()` 调 `POST /api/auth/login`；`logout()` 清 session 后跳 `login`。
+
+`router/index.js`：
+
+- `defaultPath()`：无 token 或无 user → `/login`；`employee` → `/my`；其余 → `/attendance`
+- `beforeEach`：非 public 无 token → `/login`；已登录访问 `/login` → `defaultPath()`；`need_change_password` → `/setup`；`meta.roles` 不含当前角色 → `defaultPath()`
+
+`App.vue`：`showLayout = route.matched.length > 0 && route.meta.noLayout !== true`。`main.js` 等 `router.isReady()` 再 `mount`。
+
+Vite：`appType: 'spa'` + `spaHtmlFallback()`，SPA 前缀无扩展名请求改写为 `/index.html`，避免 `/attendance` 命中旧 `attendance.html`。
+
+## 排班解析与计数（V3.2）
+
+- `parseScheduleSheet`：`await this.sheetToArray(ws)`，漏 await 则解析 0 条。
+- `flattenScheduleDays(monthRecords)`：把「月 × 员工」的 `workDays` 展开为按天行（`date`/`work`）。导入页条数与预览用天数；`POST /api/attendance/import` 的 `records` 仍传月对象。

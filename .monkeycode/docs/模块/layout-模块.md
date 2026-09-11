@@ -1,6 +1,7 @@
 # layout 模块 (v2.0 新增)
 
-**文件**：`shared/layout.js`
+**文件（V2.0）**：`shared/layout.js`  
+**文件（V3.2）**：`client/src/App.vue` + `client/src/components/AppSidebar.vue`
 
 ## 职能
 
@@ -79,3 +80,9 @@ HTML 结构必须包含以下元素：
 - `<span id="header-greeting">` — 问候语显示位置
 - `<div id="sidebar-overlay">` — 移动端叠加层（含 `onclick="AppLayout.closeMenu()"`）
 - `<button class="hamburger-btn" onclick="AppLayout.toggleMenu()">` — 汉堡按钮
+
+## V3.2 SPA 布局
+
+V3.2 不再用 `layout.js` 动态插 DOM。`App.vue`：`showLayout = route.matched.length > 0 && route.meta.noLayout !== true`。`/login` `/setup` 无侧栏。无 token 时 `defaultPath()` 直跳 `/login`，避免空 `meta` 先出侧栏。
+
+`AppSidebar.vue` 按角色过滤 `ALL_NAV`（superadmin/hradmin/deptadmin/employee）。问候语已去掉，顶栏显示 `route.meta.title`。Vite `spaHtmlFallback` 防止刷新 `/attendance` 命中旧 `attendance.html`。

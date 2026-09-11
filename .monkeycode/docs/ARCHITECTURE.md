@@ -379,7 +379,7 @@ api-store.js ── fetch ──► server.py (/api/*) ──► database.py (SQ
 
 V3.2 的目标是**多角色考勤系统**（需求阶段 R1-R9）：
 
-- **多角色权限**：`hradmin`（人事管理员）/ `deptadmin`（部门管理员）/ `employee`（员工），前端路由守卫 + 后端接口双重鉴权
+- **多角色权限**：`superadmin`（超级管理员）/ `hradmin`（人事管理员）/ `deptadmin`（部门管理员）/ `employee`（员工），前端路由守卫 + 后端接口双重鉴权
 - **审核工作流**：考勤结果单向流转 `pending_review → confirmed/disputed → submitted → locked`
 - **前端重建**：`client/src` 全新 Vite + Vue 3 SPA，功能复刻 V3.1（页面行为以 `v31-replica-reference.md` 为基线）
 - **计算引擎前置化**：考勤计算逻辑保留在前端 `shared/rules.js`（ES Module），后端 `/api/attendance/calculate` 负责落库
@@ -418,12 +418,14 @@ V3.1（前后端分离 + 静态 HTML）          V3.2（多角色 + SPA）
 ```
 attendance-v3/
 ├── client/                      # 前端 SPA
-│   ├── vite.config.js           # dev 8002、proxy /api→127.0.0.1:8001、allowedHosts
-│   ├── index.html               # 挂载 /lib/xlsx.min.js + src/main.js
+│   ├── vite.config.js           # appType spa、spaHtmlFallback、dev 8002、proxy /api→8001
+│   ├── index.html               # SPA 入口：#app + src/main.js
+│   ├── attendance.html          # 旧静态页，与 SPA /attendance 路径冲突（dev 靠 spaHtmlFallback 规避）
 │   ├── public/lib/xlsx.min.js   # SheetJS 全局脚本
 │   └── src/
-│       ├── main.js / App.vue    # 入口 + 顶层布局（topbar + 侧栏 + router-view）
-│       ├── router/index.js      # 路由表 + 登录/角色守卫 + 默认页
+│       ├── main.js              # router.isReady() 后再 mount，避免空 meta 先出侧栏
+│       ├── App.vue              # showLayout = matched.length>0 && noLayout!==true
+│       ├── router/index.js      # defaultPath 无 token/user 直跳 /login；角色 meta
 │       ├── assets/bigsur.css    # 设计系统样式（与 V3.1 相同）
 │       ├── shared/              # ES Module 共享层（替代 V3.1 shared/*.js）
 │       │   ├── api.js           # fetch 封装（Bearer、401 清 token 跳登录）
@@ -452,11 +454,31 @@ attendance-v3/
 
 | 角色 | 默认页 | 数据范围 | 主要权限 |
 |------|--------|----------|----------|
-| `hradmin` | `/attendance` | 全部 | 用户管理、规则/系统设置、全量考勤、审核/提交/锁定、seed/reset、迁移 |
-| `deptadmin` | `/attendance` | 本部门 | 查看本部门考勤、审核（确认/申诉）、提交本部门 |
+| `superadmin` | `/attendance` | 全部 | 系统设置、seed/reset、迁移、用户管理（含创建 superadmin）、规则、全量考勤、审核/提交/锁定 |
+| `hradmin` | `/attendance` | 全部 | 用户管理（不可见/不可管 superadmin）、规则、导入/导出、全量考勤、审核/提交/锁定 |
+| `deptadmin` | `/attendance` | 本部门 | 查看本部门考勤、审核（确认/申诉）、提交本部门、我的考勤 |
 | `employee` | `/my` | 本人 | 查看本人考勤（`/api/attendance/my`） |
 
-后端鉴权辅助：`middleware._require_hradmin / _require_any_user`；员工访问 `/api/attendance/all`、`/api/users` 等返回 403。
+`admin` 账号启动时强制 `superadmin`（`handlers/auth.py ensure_admin_user`）。后端鉴权：`users.py`/`rules.py` 的 `_require_admin`（`hradmin`+`superadmin`）、`system.py`/`migrate.py` 的 `_require_superadmin`、`attendance.py` 的 `_require_any_user`。员工访问 `/api/attendance/all`、`/api/users` 返回 403。
+
+前端路由 `meta.roles`（`router/index.js`）：
+
+| 路径 | 角色 |
+|------|------|
+| `/login` `/setup` | 公开 / 登录后强制改密 |
+| `/my` | superadmin / deptadmin / employee |
+| `/import` `/export` `/users` `/settings/rules` | superadmin / hradmin |
+| `/attendance` | superadmin / hradmin / deptadmin |
+| `/settings` | 仅 superadmin |
+
+侧栏 `AppSidebar.vue` 的 `ALL_NAV` 与上表一致。`/` 与 `/index.html` 走 `defaultPath()`：无 token 或无 user → `/login`；`employee` → `/my`；其余 → `/attendance`。
+
+### SPA 布局与刷新
+
+- `App.vue`：`showLayout` 仅当 `route.matched.length > 0` 且 `meta.noLayout !== true`。路由未匹配前不渲染侧栏。
+- `main.js`：`router.isReady().then(() => app.mount('#app'))`。
+- Vite `vite.config.js`：`appType: 'spa'` + `spaHtmlFallback()`。`/login` `/setup` `/my` `/import` `/attendance` `/export` `/users` `/settings` 无扩展名请求改写为 `/index.html`，避免命中根目录旧 `attendance.html`。
+- 8001 `_serve_static`：`/` `/index.html` 优先 `client/dist`；无扩展名路径回退 `dist/index.html`；显式路径仍可访问旧 HTML。
 
 ## 审核工作流
 
@@ -474,30 +496,33 @@ pending_review ──确认──► confirmed ──部门/人事提交──�
 
 | 方法 | 路径 | 功能 | 角色 |
 |------|------|------|------|
-| POST | `/api/auth/login` | 登录（含 5 次失败锁 30 分钟）→ JWT | 公开 |
+| POST | `/api/auth/login` | 登录（连错 5 次锁 24 小时）→ JWT | 公开 |
 | POST | `/api/auth/change-password` | 修改本人密码 | 登录 |
 | GET | `/api/auth/login-check` | token 有效性 | 登录 |
-| GET | `/api/users` / POST `/api/users` | 用户列表 / 新建 | hradmin |
-| PATCH | `/api/users/{id}/status` | 启/禁用 | hradmin |
-| POST | `/api/users/reset-password` | 重置密码 | hradmin |
-| GET | `/api/system/version` `/status` `/config` | 系统信息 | 登录/hradmin |
-| POST | `/api/system/seed-test-data` `/reset-data` | 测试数据 / 数据重置 | hradmin |
-| PUT | `/api/rules/config` `/tolerance`、GET/POST/DELETE `/api/rules/holidays` | 规则配置 | hradmin |
+| GET | `/api/users` / POST `/api/users` | 用户列表 / 新建 | hradmin/superadmin |
+| PUT | `/api/users/{id}` | 更新用户 | hradmin/superadmin |
+| PATCH | `/api/users/{id}/status` | 启/禁用 | hradmin/superadmin |
+| POST | `/api/users/reset-password` | 重置密码 | hradmin/superadmin |
+| POST | `/api/users/import-from-punch` | 从名册/打卡导入员工账号 | hradmin/superadmin |
+| GET | `/api/system/version` `/config` | 系统信息 | 登录 |
+| GET | `/api/system/status` | 含各表行数 | superadmin |
+| POST | `/api/system/seed-test-data` `/reset-data` | 测试数据 / 数据重置 | superadmin |
+| PUT | `/api/rules/config` `/tolerance`、GET/POST/DELETE `/api/rules/holidays` | 规则配置 | hradmin/superadmin |
 | POST | `/api/attendance/import` | Excel 数据导入（6 类型） | 登录 |
 | POST | `/api/attendance/calculate` | 存储前端计算结果 | 登录 |
 | GET | `/api/attendance/my` `/all` `/summary` | 本人/全部/汇总 | 角色 |
-| PATCH | `/api/attendance/{id}/review` | 审核（确认/申诉） | deptadmin/hradmin |
-| PATCH | `/api/attendance/dept/submit` | 部门提交 | deptadmin/hradmin |
-| PATCH | `/api/attendance/lock` | 锁定整月 | hradmin |
+| PATCH | `/api/attendance/{id}/review` | 审核（确认/申诉） | deptadmin/hradmin/superadmin |
+| PATCH | `/api/attendance/dept/submit` | 部门提交 | deptadmin/hradmin/superadmin |
+| PATCH | `/api/attendance/lock` | 锁定整月 | hradmin/superadmin |
 | POST | `/api/export/flat` `/calendar` | XLSX 导出 | 登录 |
-| POST | `/api/migrate` | V2.0 JSON 迁移（失败回滚） | hradmin |
+| POST | `/api/migrate` | V2.0 JSON 迁移（失败回滚） | superadmin |
 | GET/POST/DELETE | `/api/store/*` | 通用表 CRUD（含表名映射） | 登录 |
 
 `/api/store/*` 提供 **V3.1 前端表名映射**：`punch→punch_records`、`leave→leave_records`、`overtime→overtime_records`、`travel→travel_records`、`miss_punch→miss_punch_records`、`schedule→schedules`。
 
 ## 数据流（V3.2）
 
-1. **导入**：前端 `Excel.parseExcelFile()` 解析 → `Store` → `POST /api/attendance/import` → 后端按类型落库（punch 导入前清空整表、`_sync_employees` 建立名册、记录 `settings.last_punch_month`、schedule 需先有名册）
+1. **导入**：前端 `Excel.parseExcelFile()` 解析 → `POST /api/attendance/import` → 后端按类型落库（punch 导入前清空整表、`_sync_employees` 建立名册、记录 `settings.last_punch_month`、schedule 需先有名册）。排班：`parseScheduleSheet` 必须 `await sheetToArray`；界面条数/预览用 `flattenScheduleDays` 按天展开；入库 `records` 仍为「月 × 员工」对象。
 2. **计算**：前端 `RulesEngine.calculateMonth()`（`shared/rules.js`）拉取数据、浏览器内计算 → `POST /api/attendance/calculate`（body 含 results + carry_over）→ 后端删除该月旧结果后批量落库
 3. **审核**：`PATCH /api/attendance/{id}/review`（确认/申诉）→ `dept/submit`（部门提交）→ `lock`（人事锁定）
 4. **导出**：前端读 `attendance_results` → `POST /api/export/flat|calendar` → openpyxl XLSX 下载
@@ -513,6 +538,14 @@ pending_review ──确认──► confirmed ──部门/人事提交──�
 
 修改月份后 `watch(currentMonth)` → `loadResults()` 重新加载（结果为空且该月有打卡时自动触发 `runCalculation`）。
 
+空结果提示（`AttendanceView.vue`）：
+
+- `configChanged`：仅当本月**已有计算结果**且 `config_updated_at` 新于 `last_calc_<month>`，或 `rules_version` ≠ `RULES_VERSION`（当前 `1.0.28`）时亮「规则已变更」。
+- `noResults`：无结果但该月有打卡 → 「尚未计算」。空表不写「请先导入」。
+- `tableEmptyHint`：`noResults` 时传空串，隐藏表格内第二道提示，避免双红条。
+
+分页：考勤页与用户管理页固定 7 槽、按钮等宽、状态文案 `N / M`。
+
 ## 与 v3.1 的主要变更
 
 | 方面 | v3.1 | v3.2 |
@@ -520,7 +553,7 @@ pending_review ──确认──► confirmed ──部门/人事提交──�
 | 前端 | V2.0 静态 HTML（`*.html` + `shared/*.js`） | Vite + Vue3 SPA（`client/src`） |
 | 认证 | `server.py` 手写 HMAC JWT | `middleware.py` PyJWT 统一（`verify_token`） |
 | handler | 仅 `export.py` 挂载，其余未接入 | 7 个 handler + middleware 全量挂载 |
-| 角色 | 仅 admin | hradmin / deptadmin / employee |
+| 角色 | 仅 admin | superadmin / hradmin / deptadmin / employee |
 | 审核 | 无 | pending→confirmed→submitted→locked + operation_logs |
 | 数据库 | 13 张表 | +users / operation_logs；attendance_results +id/review 三字段 |
 | 计算落库 | `Store.clearTable + bulkPut` | `POST /api/attendance/calculate`（删除该月旧结果） |
@@ -529,7 +562,8 @@ pending_review ──确认──► confirmed ──部门/人事提交──�
 
 ## V3.2 已知情况（如实记录）
 
-1. **计算在前端**：考勤判定逻辑位于前端 `client/src/shared/rules.js`，后端 `/api/attendance/calculate` 仅存储。测试通过 esbuild bundle 在 Node 中驱动该逻辑。
-2. **login.html 登录修复**：V3.1 遗留的"同步调用异步 `Auth.login()` 导致登录页永远报错"已修复（改为 `.then()` 处理）；`shared/auth.js` 现从 `data.data.user` 读取用户信息，并在 `need_change_password` 时写入 sessionStorage 供 SPA 守卫跳转 `/setup`。
-3. **静态托管（server.py）**：8001 `/` 与 `/index.html` 服务 `client/dist` 构建产物（V3.2 SPA 生产入口），`/assets/*`、`/lib/*` 从 dist 读取；V3.1 旧版 `login.html`/`attendance.html` 等页面保留，仍可通过显式路径访问。旧版 `login.html` 登录成功统一跳转 `/`（SPA 入口），由路由守卫决定默认页或强制 `/setup` 改密。
-4. **gitee 远程推送**：origin 为 GitHub；gitee 需使用 URL 内嵌 token 方式推送（`https://<user>:<token>@gitee.com/<org>/<repo>.git`），已配置于 `/root/.netrc`。
+1. **计算在前端**：考勤判定逻辑位于 `client/src/shared/rules.js`，后端 `/api/attendance/calculate` 仅存储。测试通过 esbuild bundle 在 Node 中驱动。`RULES_VERSION = '1.0.28'`。
+2. **登录入口**：主入口为 SPA `/login`（Vite 8002 或 8001 dist）。`client/login.html` 已删除。旧 `attendance.html` 仍在 `client/`，刷新 `/attendance` 时 Vite 必须走 SPA 回退，否则会出旧侧栏页。
+3. **静态托管（server.py）**：8001 `/` `/index.html` 服务 `client/dist`；`/assets/*` `/lib/*` 从 dist 读；无扩展名路径回退 `dist/index.html`。旧 HTML 仅显式路径可达。
+4. **登录锁定**：连错 5 次写 `locked_until`（+1 天）；距 `last_failed_login` 超过 1 天由 `clear_stale_attempts` 清零计数。
+5. **gitee 远程推送**：origin 为 GitHub；gitee 需 URL 内嵌 token（`https://<user>:<token>@gitee.com/<org>/<repo>.git`）。
