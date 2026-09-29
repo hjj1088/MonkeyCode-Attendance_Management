@@ -14,47 +14,48 @@ const routes = [
     meta: { noLayout: true, title: '设置管理员密码' },
   },
   { path: '/', redirect: defaultPath },
+  { path: '/index.html', redirect: defaultPath },
   {
     path: '/my',
     name: 'my',
     component: () => import('../views/MyAttendanceView.vue'),
-    meta: { title: '我的考勤' },
+    meta: { roles: ['superadmin', 'deptadmin', 'employee'], title: '我的考勤' },
   },
   {
     path: '/import',
     name: 'import',
     component: () => import('../views/ImportView.vue'),
-    meta: { roles: ['hradmin'], title: '数据导入' },
+    meta: { roles: ['superadmin', 'hradmin'], title: '数据导入' },
   },
   {
     path: '/attendance',
     name: 'attendance',
     component: () => import('../views/AttendanceView.vue'),
-    meta: { roles: ['hradmin', 'deptadmin'], title: '考勤计算' },
+    meta: { roles: ['superadmin', 'hradmin', 'deptadmin'], title: '考勤计算' },
   },
   {
     path: '/export',
     name: 'export',
     component: () => import('../views/ExportView.vue'),
-    meta: { roles: ['hradmin'], title: '导出中心' },
+    meta: { roles: ['superadmin', 'hradmin'], title: '导出中心' },
   },
   {
     path: '/users',
     name: 'users',
     component: () => import('../views/UserManageView.vue'),
-    meta: { roles: ['hradmin'], title: '用户管理' },
+    meta: { roles: ['superadmin', 'hradmin'], title: '用户管理' },
   },
   {
     path: '/settings',
     name: 'settings',
     component: () => import('../views/SettingsView.vue'),
-    meta: { roles: ['hradmin'], title: '系统设置' },
+    meta: { roles: ['superadmin'], title: '系统设置' },
   },
   {
     path: '/settings/rules',
     name: 'rules',
     component: () => import('../views/RulesSettingsView.vue'),
-    meta: { roles: ['hradmin'], title: '考勤规则' },
+    meta: { roles: ['superadmin', 'hradmin'], title: '考勤规则' },
   },
 ];
 
@@ -67,8 +68,10 @@ function getUser() {
 }
 
 function defaultPath() {
+  const token = sessionStorage.getItem('token');
   const user = getUser();
-  if (user && user.role === 'employee') return { path: '/my' };
+  if (!token || !user) return { path: '/login' };
+  if (user.role === 'employee') return { path: '/my' };
   return { path: '/attendance' };
 }
 

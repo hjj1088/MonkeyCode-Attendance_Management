@@ -16,12 +16,12 @@ const STATUS_LABELS = {
 
 const STATUS_BADGE = {
   normal: 'badge-normal',
-  rest: '',
+  rest: 'badge-rest',
   abnormal: 'badge-late',
   leave: 'badge-leave',
   travel: 'badge-travel',
   absent: 'badge-miss',
-  overtime: 'badge-early',
+  overtime: 'badge-nosign',
   suspect_ot: 'badge-nosign',
   no_sign_in: 'badge-nosign',
   no_sign_out: 'badge-nosign',
@@ -29,12 +29,15 @@ const STATUS_BADGE = {
 
 const STATUS_COLORS = {
   normal: 'var(--jade)',
+  rest: 'var(--ink-secondary)',
   abnormal: 'var(--vermillion)',
-  leave: 'var(--indigo)',
-  travel: 'var(--sandal)',
+  leave: 'var(--celadon)',
+  travel: 'var(--celadon)',
   absent: 'var(--vermillion)',
-  overtime: 'var(--gold)',
-  suspect_ot: 'var(--sandal)',
+  overtime: 'var(--gold-muted)',
+  suspect_ot: 'var(--gold-muted)',
+  no_sign_in: 'var(--gold-muted)',
+  no_sign_out: 'var(--gold-muted)',
 };
 
 const CAL_CELL_CLASS = {
@@ -45,6 +48,9 @@ const CAL_CELL_CLASS = {
   leave: 'cal-leave',
   travel: 'cal-travel',
   overtime: 'cal-overtime',
+  suspect_ot: 'cal-overtime',
+  no_sign_in: 'cal-abnormal',
+  no_sign_out: 'cal-abnormal',
   holiday: 'cal-holiday',
   unknown: 'cal-unknown',
 };
@@ -58,7 +64,11 @@ export function statusBadgeClass(s) {
 }
 
 export function statusColor(s) {
-  return STATUS_COLORS[s] || 'var(--text-secondary)';
+  return STATUS_COLORS[s] || 'var(--ink-secondary)';
+}
+
+export function calCellClass(s) {
+  return CAL_CELL_CLASS[s] || 'cal-unknown';
 }
 
 export function remarkText(r) {
@@ -66,10 +76,11 @@ export function remarkText(r) {
   if (r.leaveType) p.push(r.leaveType + (r.leaveHours ? r.leaveHours + 'h' : ''));
   else if (r.sourceLeaveIds && r.sourceLeaveIds.length) p.push('请假');
   if (r.travelHours > 0 || (r.sourceTravelIds && r.sourceTravelIds.length)) p.push('出差');
-  if (r.overtimeHours > 0 && r.status !== 'leave' && r.status !== 'travel') p.push('加班' + r.overtimeHours + 'h');
-  else if (r.status === 'overtime') p.push('疑似加班' + (r.overtimeHours ? r.overtimeHours + 'h' : ''));
-  else if (r.sourceOvertimeIds && r.sourceOvertimeIds.length) p.push('有加班');
-  if (r.status === 'suspect_ot') p.push('疑似加班');
+  const isOvertimeStatus = r.status === 'overtime' || r.status === 'suspect_ot';
+  if (!isOvertimeStatus) {
+    if (r.overtimeHours > 0 && r.status !== 'leave' && r.status !== 'travel') p.push('加班' + r.overtimeHours + 'h');
+    else if (r.sourceOvertimeIds && r.sourceOvertimeIds.length) p.push('有加班');
+  }
   if (r.sourceMissIds && r.sourceMissIds.length) p.push('补卡');
   if (r.absent) p.push('缺勤');
   return p.join('/');

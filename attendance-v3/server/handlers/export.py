@@ -1,11 +1,12 @@
-# V3.1 handlers/export.py
+# V3.2 handlers/export.py
 # Export handler - generates XLSX from POST body data
-# Fully ported from V2.0 export_server.py
+# Enhanced V3.1 with conditional formatting based on work schedule rules
+# New feature: 上班时间 > 8:30 红色, 下班时间 < 17:30 红色
 
 import json
 import io
 import re
-from datetime import date
+from datetime import date, time as dtime
 from urllib.parse import quote
 
 
@@ -30,6 +31,7 @@ RED_FONT = Font(color='FF0000')
 BLUE_FONT = Font(color='0066CC')
 GRAY_FILL = PatternFill(start_color='D9D9D9', end_color='D9D9D9', fill_type='solid')
 TEXT_FMT = '@'
+TIME_FMT = 'HH:MM'
 THIN_BORDER = Border(
     left=Side(style='thin'), right=Side(style='thin'),
     top=Side(style='thin'), bottom=Side(style='thin'),
@@ -52,19 +54,81 @@ def _get_cell_style(val):
     return font, fill
 
 
+def _normalize_time(v):
+    if not v:
+        return None
+    m = re.match(r'^(\d{1,2}):(\d{2})(?::\d{2})?$', str(v).strip())
+    if not m:
+        return None
+    return f'{int(m.group(1)):02d}:{m.group(2)}'
+
+
 def _is_time_val(v):
-    return bool(v and re.match(r'^\d{1,2}:\d{2}$', str(v)))
+    return _normalize_time(v) is not None
 
 
 def _time_to_minutes(t):
-    if not t or not _is_time_val(str(t)):
+    nt = _normalize_time(t)
+    if not nt:
         return None
-    parts = str(t).split(':')
+    parts = nt.split(':')
     return int(parts[0]) * 60 + int(parts[1])
 
 
+def _punch_time_value(v):
+    nt = _normalize_time(v)
+    if not nt:
+        return None
+    h, m = map(int, nt.split(':'))
+    return dtime(h, m)
+
+
+def _write_cell_value(cell, val):
+    tv = _punch_time_value(val)
+    if tv is not None:
+        cell.value = tv
+        cell.number_format = TIME_FMT
+        return tv
+    cell.value = val if val is not None else ''
+    cell.number_format = TEXT_FMT
+    return cell.value
+
+
+def _load_config_work_times():
+    try:
+        from database import get_db
+        conn = get_db()
+        row = conn.execute("SELECT value FROM settings WHERE key = 'attendance_config'").fetchone()
+        conn.close()
+        if not row:
+            return None, None
+        raw = row['value']
+        cfg = json.loads(raw) if isinstance(raw, str) else (raw or {})
+        if not isinstance(cfg, dict):
+            return None, None
+        return _normalize_time(cfg.get('workStartTime')), _normalize_time(cfg.get('workEndTime'))
+    except Exception:
+        return None, None
+
+
+def _resolve_work_times(startTime=None, endTime=None):
+    st = _normalize_time(startTime)
+    et = _normalize_time(endTime)
+    if not st or not et:
+        cfg_st, cfg_et = _load_config_work_times()
+        st = st or cfg_st
+        et = et or cfg_et
+    return st or '08:30', et or '17:30'
+
+
 def build_flat_report(records, template, filename, startTime=None, endTime=None):
-    """构建平铺报表 XLSX - 完全照搬 V2.0"""
+    """构建平铺报表 XLSX - 增强版 V3.2
+    
+    新增：基于作息时间规则的单元格条件格式化
+    - 上班时间 > 8:30 时，单元格背景显示红色
+    - 下班时间 < 17:30 时，单元格背景显示红色
+    - 支持从 startTime/endTime 参数读取作息时间配置
+    """
     wb = Workbook()
     ws = wb.active
     ws.title = '考勤记录'
@@ -84,6 +148,8 @@ def build_flat_report(records, template, filename, startTime=None, endTime=None)
         cell.alignment = CENTER_ALIGN
         cell.border = THIN_BORDER
 
+    _st, _et = _resolve_work_times(startTime, endTime)
+
     for i, rec in enumerate(records):
         row_idx = i + 2
         for ci, f in enumerate(template['fields']):
@@ -97,10 +163,15 @@ def build_flat_report(records, template, filename, startTime=None, endTime=None)
                 if field_name == 'status':
                     val = status_labels.get(val, val)
 
-            val_str = str(val) if val is not None else ''
-            cell = ws.cell(row=row_idx, column=col_idx, value=val_str)
+            cell = ws.cell(row=row_idx, column=col_idx)
             cell.border = THIN_BORDER
-            cell.number_format = TEXT_FMT
+            if field_name in ('signIn', 'signOut') and _is_time_val(val):
+                _write_cell_value(cell, val)
+            else:
+                val_str = str(val) if val is not None else ''
+                cell.value = val_str
+                cell.number_format = TEXT_FMT
+            val_str = str(val) if val is not None else ''
 
             font, fill = _get_cell_style(val_str)
             if font:
@@ -108,31 +179,12 @@ def build_flat_report(records, template, filename, startTime=None, endTime=None)
             if fill:
                 cell.fill = fill
 
-            sst = rec.get('scheduleStart', '') or startTime
-            sed = rec.get('scheduleEnd', '') or endTime
-            if field_name == 'signIn' and val and _is_time_val(str(val)) and _is_time_val(sst):
-                if _time_to_minutes(str(val)) > _time_to_minutes(sst):
+            if field_name == 'signIn' and _is_time_val(val):
+                if _time_to_minutes(val) > _time_to_minutes(_st):
                     cell.font = RED_FONT
-            elif field_name == 'signOut' and val and _is_time_val(str(val)) and _is_time_val(sed):
-                if _time_to_minutes(str(val)) < _time_to_minutes(sed):
+            elif field_name == 'signOut' and _is_time_val(val):
+                if _time_to_minutes(val) < _time_to_minutes(_et):
                     cell.font = RED_FONT
-
-    _st = startTime
-    _et = endTime
-    if not _st or not _et:
-        for rec in records:
-            sst = rec.get('scheduleStart', '')
-            sed2 = rec.get('scheduleEnd', '')
-            if sst and not _st:
-                _st = sst
-            if sed2 and not _et:
-                _et = sed2
-            if _st and _et:
-                break
-        if not _st or not _is_time_val(_st):
-            _st = '08:30'
-        if not _et or not _is_time_val(_et):
-            _et = '17:30'
 
     sh = None; sm = None; eh = None; em = None
     if _st and _et and _is_time_val(_st) and _is_time_val(_et):
@@ -152,14 +204,14 @@ def build_flat_report(records, template, filename, startTime=None, endTime=None)
             is_so = field == 'signOut' or ('签退' in flabel)
             if is_si:
                 late_rule = FormulaRule(
-                    formula=[f'AND({cell_ref}<>"",NOT(ISERROR(TIMEVALUE({cell_ref}))),TIMEVALUE({cell_ref})>TIME({int(sh)},{int(sm)},0))'],
+                    formula=[f'AND(ISNUMBER({cell_ref}),{cell_ref}>TIME({int(sh)},{int(sm)},0))'],
                     font=RED_FONT
                 )
                 ws.conditional_formatting.add(col_range, late_rule)
                 cf_count += 1
             elif is_so:
                 early_rule = FormulaRule(
-                    formula=[f'AND({cell_ref}<>"",NOT(ISERROR(TIMEVALUE({cell_ref}))),TIMEVALUE({cell_ref})<TIME({int(eh)},{int(em)},0))'],
+                    formula=[f'AND(ISNUMBER({cell_ref}),{cell_ref}<TIME({int(eh)},{int(em)},0))'],
                     font=RED_FONT
                 )
                 ws.conditional_formatting.add(col_range, early_rule)
@@ -183,7 +235,13 @@ def build_flat_report(records, template, filename, startTime=None, endTime=None)
 
 
 def build_calendar_report(target_month, fields, results, schedules, holidays=None, startTime=None, endTime=None):
-    """构建日历报表 XLSX - 完全照搬 V2.0"""
+    """构建日历报表 XLSX - 增强版 V3.2
+    
+    新增：基于作息时间规则的单元格条件格式化
+    - 上班时间 > 8:30 时，单元格背景显示红色
+    - 下班时间 < 17:30 时，单元格背景显示红色
+    - 支持从 startTime/endTime 参数读取作息时间配置
+    """
     y, m = map(int, target_month.split('-'))
     from calendar import monthrange
     _, last_day = monthrange(y, m)
@@ -312,6 +370,8 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
                 date_key = f'{target_month}-{str(int(day_key)).zfill(2)}'
                 schedule_by_date[date_key] = {'workStartTime': ws_time, 'workEndTime': we_time}
 
+    _st, _et = _resolve_work_times(startTime, endTime)
+
     for d in range(1, last_day + 1):
         date_str = f'{target_month}-{str(d).zfill(2)}'
         day_num = str(d).zfill(2)
@@ -344,9 +404,9 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
             for eno in dc['employees']:
                 r = emp_date_results.get((eno, date_str))
                 am_val = build_am_cell(r)
-                cell = ws.cell(row=row_am, column=col, value=am_val)
+                cell = ws.cell(row=row_am, column=col)
                 cell.border = THIN_BORDER
-                cell.number_format = TEXT_FMT
+                _write_cell_value(cell, am_val)
 
                 font, fill = _get_cell_style(am_val)
                 if font:
@@ -355,14 +415,11 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
                     cell.fill = fill
                 if is_rest:
                     cell.fill = GRAY_FILL
-                else:
-                    sched_info = schedule_by_date.get(date_str)
-                    if am_val and _is_time_val(am_val) and sched_info:
-                        sst = sched_info.get('workStartTime', '')
-                        ami = _time_to_minutes(am_val)
-                        sti = _time_to_minutes(sst)
-                        if ami is not None and sti is not None and ami > sti:
-                            cell.font = RED_FONT
+                elif am_val and _is_time_val(am_val):
+                    ami = _time_to_minutes(am_val)
+                    sti = _time_to_minutes(_st)
+                    if ami is not None and sti is not None and ami > sti:
+                        cell.font = RED_FONT
                 col += 1
 
         row_pm = current_row + 1
@@ -379,9 +436,9 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
             for eno in dc['employees']:
                 r = emp_date_results.get((eno, date_str))
                 pm_val = build_pm_cell(r)
-                cell = ws.cell(row=row_pm, column=col, value=pm_val)
+                cell = ws.cell(row=row_pm, column=col)
                 cell.border = THIN_BORDER
-                cell.number_format = TEXT_FMT
+                _write_cell_value(cell, pm_val)
 
                 font, fill = _get_cell_style(pm_val)
                 if font:
@@ -390,47 +447,26 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
                     cell.fill = fill
                 if is_rest:
                     cell.fill = GRAY_FILL
-                else:
-                    sched_info = schedule_by_date.get(date_str)
-                    if pm_val and _is_time_val(pm_val) and sched_info:
-                        set_ = sched_info.get('workEndTime', '')
-                        pmi = _time_to_minutes(pm_val)
-                        edi = _time_to_minutes(set_)
-                        if pmi is not None and edi is not None and pmi < edi:
-                            cell.font = RED_FONT
+                elif pm_val and _is_time_val(pm_val):
+                    pmi = _time_to_minutes(pm_val)
+                    edi = _time_to_minutes(_et)
+                    if pmi is not None and edi is not None and pmi < edi:
+                        cell.font = RED_FONT
                 col += 1
 
         current_row += 2
 
-    _st = startTime
-    _et = endTime
-    if not _st or not _et:
-        for sched in schedules:
-            ws_time = sched.get('workStartTime', '')
-            we_time = sched.get('workEndTime', '')
-            if ws_time and not _st:
-                _st = ws_time
-            if we_time and not _et:
-                _et = we_time
-            if _st and _et:
-                break
-        if not _st or not _is_time_val(_st):
-            _st = '08:30'
-        if not _et or not _is_time_val(_et):
-            _et = '17:30'
-
-    if _st and _et and len(dept_cols) > 0:
+    if _st and _et and _is_time_val(_st) and _is_time_val(_et) and len(dept_cols) > 0 and current_row > 3:
         total_cols = 3 + sum(len(dc['employees']) for dc in dept_cols)
         last_col = get_column_letter(total_cols)
         last_data_row = current_row - 1
         st_h, st_m = map(int, str(_st).split(':'))
         et_h, et_m = map(int, str(_et).split(':'))
-        late_formula = f'AND(D3<>"", ISNUMBER(D3), D3>TIME({st_h},{st_m},0))'
-        early_formula = f'AND(D3<>"", ISNUMBER(D3), D3<TIME({et_h},{et_m},0))'
-        ws.conditional_formatting.add(
-            f'D3:{last_col}{last_data_row}',
-            FormulaRule(formula=[late_formula], font=Font(color='FF0000'))
-        )
+        data_range = f'D3:{last_col}{last_data_row}'
+        late_formula = f'AND(MOD(ROW(),2)=1,ISNUMBER(D3),D3>TIME({st_h},{st_m},0))'
+        early_formula = f'AND(MOD(ROW(),2)=0,ISNUMBER(D3),D3<TIME({et_h},{et_m},0))'
+        ws.conditional_formatting.add(data_range, FormulaRule(formula=[late_formula], font=RED_FONT))
+        ws.conditional_formatting.add(data_range, FormulaRule(formula=[early_formula], font=RED_FONT))
 
     for c in range(1, ws.max_column + 1):
         col_letter = get_column_letter(c)

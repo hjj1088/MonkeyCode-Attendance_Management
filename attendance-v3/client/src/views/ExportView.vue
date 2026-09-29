@@ -6,7 +6,7 @@
         <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:12px">
           <div v-for="t in templates" :key="t.id" @click="selectTemplate(t)" class="template-item" :class="{ active: selectedTemplate && selectedTemplate.id === t.id }">{{ t.name }}</div>
         </div>
-        <button @click="saveAsTemplate" class="btn btn-primary btn-sm" style="width:100%">另存为模板</button>
+        <button @click="saveAsTemplate" class="btn btn-primary btn-sm" style="width:100%"><AppIcon name="save" /><span>另存为模板</span></button>
       </div>
     </div>
 
@@ -19,23 +19,23 @@
             <select v-model="field.field" style="flex:1">
               <option v-for="col in availableColumns" :key="col.field" :value="col.field">{{ col.label }}</option>
             </select>
-            <button @click="removeField(idx)" class="btn btn-ghost btn-sm" style="color:var(--vermillion)">删除</button>
+            <button @click="removeField(idx)" class="btn btn-ghost btn-sm btn-danger-text"><AppIcon name="trash" :size="13" /><span>删除</span></button>
           </div>
         </div>
-        <button @click="addField" class="btn btn-secondary btn-sm mt-sm">添加字段</button>
+        <button @click="addField" class="btn btn-secondary btn-sm mt-sm"><AppIcon name="plus" /><span>添加字段</span></button>
       </div>
 
       <div class="card">
         <h3 style="font-size:14px;font-weight:600;margin-bottom:12px">导出设置</h3>
         <div class="flex gap-sm flex-wrap" style="align-items:center">
-          <select v-model="exportMonth" style="padding:6px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font-sans);background:var(--card-bg);color:var(--text)">
+          <select v-model="exportMonth" class="form-select" style="width:auto">
             <option value="">导出: 全部月份</option>
             <option v-for="m in availableMonths" :key="m" :value="m">{{ m }}</option>
           </select>
-          <button @click="doExport" class="btn btn-primary btn-sm">导出 Excel</button>
-          <button @click="doCalendarExport" :disabled="!exportMonth" class="btn btn-primary btn-sm">导出考勤明细</button>
+          <button @click="doExport" class="btn btn-primary btn-sm"><AppIcon name="download" /><span>导出 Excel</span></button>
+          <button @click="doCalendarExport" :disabled="!exportMonth" class="btn btn-primary btn-sm"><AppIcon name="calendar" /><span>导出考勤明细</span></button>
         </div>
-        <div style="font-size:11px;color:var(--text-secondary);margin-top:8px">
+        <div class="hint-text">
           考勤明细：日历格式，按模板字段输出。每天两行（上午/下午），上班打卡和下班打卡分列，含排班标注
         </div>
       </div>
@@ -56,7 +56,7 @@
             </tbody>
           </table>
         </div>
-        <div v-else style="padding:24px;text-align:center;font-size:13px;color:var(--text-secondary)">暂无数据预览</div>
+        <div v-else class="empty-hint">暂无数据预览</div>
       </div>
     </div>
   </div>
@@ -64,6 +64,7 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue';
+import AppIcon from '../components/AppIcon.vue';
 import Store from '../shared/store';
 import Excel from '../shared/excel';
 
@@ -150,7 +151,7 @@ async function doExport() {
   if (!records.length) { alert('没有可导出的数据'); return; }
   const template = { fields: editingFields.value };
   const filename = exportMonth.value ? '考勤记录_' + exportMonth.value + '.xlsx' : '考勤记录_全部.xlsx';
-  Excel.exportToExcel(records, template, filename);
+  await Excel.exportToExcel(records, template, filename);
 }
 
 async function doCalendarExport() {
@@ -169,11 +170,14 @@ async function doCalendarExport() {
 .export-left { width: 200px; flex-shrink: 0; }
 .export-main { flex: 1; min-width: 0; }
 .export-right { width: 360px; flex-shrink: 0; }
-.template-item { padding: 8px 12px; border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; transition: all 0.15s; }
-.template-item:hover { background: rgba(0,0,0,0.04); }
-.template-item.active { background: rgba(196,61,61,0.08); color: var(--vermillion); font-weight: 500; }
+.template-item { padding: 8px 12px; border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.template-item:hover { background: rgba(62, 47, 35, 0.05); }
+.template-item.active { background: var(--celadon-light); color: var(--celadon); font-weight: 500; }
 .field-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
-.field-row input, .field-row select { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-family: var(--font-sans); background: var(--card-bg); color: var(--text); }
-.field-row input:focus, .field-row select:focus { outline: none; border-color: var(--vermillion); }
+.field-row input, .field-row select { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 14px; font-family: var(--font-sans); background: var(--card-bg); color: var(--ink); }
+.field-row input:focus, .field-row select:focus { outline: none; border-color: var(--celadon); box-shadow: 0 0 0 3px rgba(61, 90, 102, 0.12); }
+.btn-danger-text { color: var(--vermillion); }
+.hint-text { font-size: 12px; color: var(--ink-secondary); margin-top: 8px; }
+.empty-hint { padding: 24px; text-align: center; font-size: 13px; color: var(--ink-secondary); }
 @media (max-width: 900px) { .export-layout { flex-direction: column; } .export-left, .export-right { width: 100%; } }
 </style>

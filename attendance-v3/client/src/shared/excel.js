@@ -1,12 +1,34 @@
 // shared/excel.js
 // SheetJS 封装 - Excel 解析、排班表颜色识别、导出（ES Module 化，无 IndexedDB 依赖）
+// XLSX 882KB 库懒加载：首次调用任何解析/导出方法时动态注入 <script>，避免阻塞 SPA 首屏（登录页）
 
 import Store from './store';
 
-const XLSX = window.XLSX;
+let _xlsxLoading = null;
+
+function getXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (!_xlsxLoading) {
+    _xlsxLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/lib/xlsx.min.js';
+      s.onload = () => resolve(window.XLSX);
+      s.onerror = () => { _xlsxLoading = null; reject(new Error('xlsx.min.js 加载失败')); };
+      document.head.appendChild(s);
+    });
+  }
+  return _xlsxLoading;
+}
+
+async function withXLSX() {
+  const X = await getXLSX();
+  if (!X) throw new Error('XLSX 库不可用');
+  return X;
+}
 
 export const Excel = {
-  parseExcelFile(file) {
+  async parseExcelFile(file) {
+    const XLSX = await withXLSX();
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = function (e) {
@@ -27,11 +49,13 @@ export const Excel = {
     return wb.SheetNames || [];
   },
 
-  sheetToJson(ws) {
+  async sheetToJson(ws) {
+    const XLSX = await withXLSX();
     return XLSX.utils.sheet_to_json(ws, { defval: '' });
   },
 
-  sheetToArray(ws) {
+  async sheetToArray(ws) {
+    const XLSX = await withXLSX();
     return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
   },
 
@@ -46,14 +70,15 @@ export const Excel = {
     return !!fill.rgb || (fill.indexed != null && fill.indexed !== 64 && fill.indexed !== 65);
   },
 
-  parseScheduleSheet(ws, sheetName) {
+  async parseScheduleSheet(ws, sheetName) {
+    const XLSX = await withXLSX();
     const result = { year: null, month: null, workDays: {} };
 
     const monthMatch = sheetName.trim().match(/^(\d{1,2})月$/);
     if (!monthMatch) return null;
     result.month = parseInt(monthMatch[1]);
 
-    const rows = this.sheetToArray(ws);
+    const rows = await this.sheetToArray(ws);
 
     for (let i = 0; i < rows.length && !result.year; i++) {
       const row = rows[i];
@@ -135,21 +160,43 @@ export const Excel = {
     });
   },
 
-  parseAllScheduleSheets(wb) {
+  async parseAllScheduleSheets(wb) {
+    const XLSX = await withXLSX();
     const results = [];
     const names = this.getSheetNames(wb);
     for (const name of names) {
       const trimmed = name.trim();
       if (/^\d{1,2}月$/.test(trimmed)) {
         const ws = wb.Sheets[name];
-        const parsed = this.parseScheduleSheet(ws, trimmed);
+        const parsed = await this.parseScheduleSheet(ws, trimmed);
         if (parsed) results.push(parsed);
       }
     }
     return results;
   },
 
-  identifyFileType(wb) {
+  flattenScheduleDays(monthRecords) {
+    const days = [];
+    for (const rec of monthRecords || []) {
+      const y = rec.year;
+      const m = rec.month;
+      if (!y || !m) continue;
+      const monthStr = String(m).padStart(2, '0');
+      const keys = Object.keys(rec.workDays || {}).sort();
+      for (const d of keys) {
+        days.push({
+          date: y + '-' + monthStr + '-' + d,
+          year: y,
+          month: m,
+          day: Number(d),
+          work: rec.workDays[d] ? '上班' : '休息',
+        });
+      }
+    }
+    return days;
+  },
+
+  async identifyFileType(wb) {
     const names = this.getSheetNames(wb);
     if (this.isScheduleWorkbook(wb)) {
       return { type: 'schedule', confidence: 1.0 };
@@ -158,20 +205,20 @@ export const Excel = {
     let ws = null;
     for (const name of names) {
       const s = wb.Sheets[name];
-      const rows = this.sheetToArray(s);
+      const rows = await this.sheetToArray(s);
       if (rows.length > 1) { ws = s; break; }
     }
     if (!ws) return { type: 'unknown', confidence: 0 };
 
-    const headerRow = this.sheetToArray(ws)[0] || [];
+    const headerRow = (await this.sheetToArray(ws))[0] || [];
     const headers = headerRow.map(h => String(h || '').trim().replace(/\s+/g, ''));
 
     const typeRules = [
       { type: 'punch', required: ['考勤号码', '签到时间'], bonus: ['签退时间', '迟到时间', '部门', '日期', '上班时间', '下班时间'] },
-      { type: 'leave', required: ['请假类型', '开始日期'], bonus: ['结束日期', '请假天数', '申请人', '申请部门'] },
-      { type: 'overtime', required: ['加班起止时间'], bonus: ['申请人', '申请部门', '加班内容'] },
-      { type: 'travel', required: ['出差起止日期'], bonus: ['申请人', '目的地', '出差事由', '出差人员'] },
-      { type: 'miss_punch', required: ['忘打卡日期'], bonus: ['申请人', '忘打卡人员', '未打卡时间', '事由'] }
+      { type: 'leave', required: ['请假类型', '开始日期'], bonus: ['结束日期', '请假天数', '申请人', '申请部门', '是否本人', '请假人员'] },
+      { type: 'overtime', required: ['加班起止时间'], bonus: ['申请人', '申请部门', '加班内容', '是否本人', '加班人员'] },
+      { type: 'travel', required: ['出差起止日期'], bonus: ['申请人', '目的地', '出差事由', '出差人员', '是否本人'] },
+      { type: 'miss_punch', required: ['忘打卡日期'], bonus: ['申请人', '忘打卡人员', '未打卡时间', '事由', '是否本人'] }
     ];
 
     let bestType = 'unknown';
@@ -189,17 +236,36 @@ export const Excel = {
     return { type: bestType, confidence: bestType !== 'unknown' ? Math.min(bestScore / 8, 1.0) : 0 };
   },
 
-  parseRecords(wb, fileType) {
+  async parseRecords(wb, fileType) {
     const names = this.getSheetNames(wb);
     if (fileType === 'schedule') {
       return this.parseAllScheduleSheets(wb);
     }
     const ws = wb.Sheets[names[0]];
-    const raw = this.sheetToJson(ws);
-    return raw.map(row => this._normalizeRecord(row, fileType)).filter(Boolean);
+    const raw = await this.sheetToJson(ws);
+    const records = [];
+    for (const row of raw) {
+      const rec = await this._normalizeRecord(row, fileType);
+      if (rec) records.push(rec);
+    }
+    return records;
   },
 
-  _normalizeRecord(row, fileType) {
+  _isSelfValue(val) {
+    const s = String(val || '').replace(/\s+/g, '');
+    if (!s) return null;
+    if (s === '本人' || s === '是' || s === 'Y' || /^yes$/i.test(s) || /^true$/i.test(s)) return true;
+    return false;
+  },
+
+  _resolveSubject(isSelfRaw, applicant, otherPerson) {
+    const applicantName = String(applicant || '').trim();
+    const other = String(otherPerson || '').trim();
+    if (this._isSelfValue(isSelfRaw) === true) return applicantName;
+    return other || applicantName;
+  },
+
+  async _normalizeRecord(row, fileType) {
     const clean = {};
     for (const key of Object.keys(row)) {
       const cleanKey = key.replace(/\s+/g, '');
@@ -212,7 +278,7 @@ export const Excel = {
           employeeNo: clean['考勤号码'] || clean['考勤号'] || '',
           customNo: clean['自定义编号'] || '',
           name: clean['姓名'] || '',
-          date: this._formatDate(clean['日期']),
+          date: await this._formatDate(clean['日期']),
           period: clean['对应时段'] || '',
           scheduleStart: this._formatTime(clean['上班时间']),
           scheduleEnd: this._formatTime(clean['下班时间']),
@@ -232,67 +298,90 @@ export const Excel = {
           holidayOT: parseFloat(clean['节假日加班']) || 0
         };
 
-      case 'leave':
-        const leaveStart = this._formatDate(clean['开始日期']);
-        const leaveEnd = this._formatDate(clean['结束日期']);
+      case 'leave': {
+        const leaveStart = await this._formatDate(clean['开始日期']);
+        const leaveEnd = await this._formatDate(clean['结束日期']);
+        const leaveApplicant = clean['申请人'] || '';
+        const leaveIsSelf = String(clean['是否本人'] || '').trim();
         return {
-          applicant: clean['申请人'] || '',
+          applicant: leaveApplicant,
           department: clean['申请部门'] || '',
           leaveType: clean['请假类型'] || '',
           startDate: leaveStart,
           endDate: leaveEnd || leaveStart,
           leaveDays: parseFloat(clean['请假天数']) || 0,
           leaveHours: parseFloat(clean['小时']) || 0,
-          reason: clean['请假事由'] || ''
+          reason: clean['请假事由'] || '',
+          isSelf: leaveIsSelf,
+          subject: this._resolveSubject(leaveIsSelf, leaveApplicant, clean['请假人员'])
         };
+      }
 
-      case 'overtime':
+      case 'overtime': {
         const otRange = clean['加班起止时间'] || '';
         const otHours = clean['小时'] || '';
+        const otApplicant = clean['申请人'] || '';
+        const otIsSelf = String(clean['是否本人'] || '').trim();
         return {
-          applicant: clean['申请人'] || '',
+          applicant: otApplicant,
           department: clean['申请部门'] || '',
-          startTime: typeof otRange === 'number' ? (otRange > 1 ? this._formatDate(otRange) : this._formatTime(otRange)) : String(otRange).trim(),
+          startTime: typeof otRange === 'number' ? (otRange > 1 ? await this._formatDate(otRange) : this._formatTime(otRange)) : String(otRange).trim(),
           endTime: '',
           overtimeHours: parseFloat(otHours) || 0,
-          content: clean['加班内容'] || ''
+          content: clean['加班内容'] || '',
+          isSelf: otIsSelf,
+          subject: this._resolveSubject(otIsSelf, otApplicant, clean['加班人员'])
         };
+      }
 
-      case 'travel':
+      case 'travel': {
         const travelDate = clean['出差起止日期'] || '';
         const travelDateParts = travelDate.split(/[~至到]/).filter(Boolean);
         const travelStart = travelDateParts[0] || '';
         const travelEnd = travelDateParts[1] || travelStart;
+        const travelApplicant = clean['申请人'] || '';
+        const travelIsSelf = String(clean['是否本人'] || '').trim();
+        const travelers = clean['出差人员'] || '';
         return {
-          applicant: clean['申请人'] || '',
+          applicant: travelApplicant,
           department: clean['申请部门'] || '',
           destination: clean['目的地'] || '',
-          travelers: clean['出差人员'] || '',
-          startDate: this._formatDate(travelStart),
-          endDate: this._formatDate(travelEnd),
+          travelers,
+          startDate: await this._formatDate(travelStart),
+          endDate: await this._formatDate(travelEnd),
           travelType: clean['出差类型'] || '',
-          reason: clean['出差事由'] || ''
+          reason: clean['出差事由'] || '',
+          isSelf: travelIsSelf,
+          subject: this._resolveSubject(travelIsSelf, travelApplicant, travelers)
         };
+      }
 
-      case 'miss_punch':
+      case 'miss_punch': {
+        const missApplicant = clean['申请人'] || '';
+        const missIsSelf = String(clean['是否本人'] || '').trim();
+        const missPerson = clean['忘打卡人员'] || '';
         return {
-          applicant: clean['申请人'] || '',
+          applicant: missApplicant,
           department: clean['申请部门'] || '',
-          missDate: this._formatDate(clean['忘打卡日期']),
-          missPerson: clean['忘打卡人员'] || '',
+          missDate: await this._formatDate(clean['忘打卡日期']),
+          missPerson,
           missTime: this._formatTime(clean['未打卡时间']),
           cardTime: this._formatTime(clean['当天刷卡时间']),
-          reason: clean['事由'] || ''
+          reason: clean['事由'] || '',
+          isSelf: missIsSelf,
+          subject: this._resolveSubject(missIsSelf, missApplicant, missPerson)
         };
+      }
 
       default:
         return null;
     }
   },
 
-  _formatDate(val) {
+  async _formatDate(val) {
     if (!val && val !== 0) return '';
     if (typeof val === 'number') {
+      const XLSX = await withXLSX();
       const date = XLSX.SSF.parse_date_code(val);
       if (date) {
         return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
@@ -345,10 +434,22 @@ export const Excel = {
     URL.revokeObjectURL(url);
   },
 
+  _normalizeWorkTime(val) {
+    const m = String(val || '').trim().match(/^(\d{1,2}):(\d{2})/);
+    return m ? String(m[1]).padStart(2, '0') + ':' + m[2] : '';
+  },
+
+  async _getWorkTimes() {
+    const entry = await Store.getByKey('settings', 'attendance_config');
+    const cfg = (entry && entry.value) ? entry.value : (entry || {});
+    return {
+      startTime: this._normalizeWorkTime(cfg.workStartTime) || '08:30',
+      endTime: this._normalizeWorkTime(cfg.workEndTime) || '17:30'
+    };
+  },
+
   async exportToExcel(records, template, filename) {
-    const config = await Store.getByKey('settings', 'attendance_config') || {};
-    const startTime = config.workStartTime || '';
-    const endTime = config.workEndTime || '';
+    const { startTime, endTime } = await Excel._getWorkTimes();
     return Excel._apiExport('/api/export/flat', {
       records: records,
       template: template,
@@ -372,9 +473,7 @@ export const Excel = {
     const allHolidays = await Store.getAll('holidays');
     const holidaysForMonth = allHolidays.filter(h => h.date && h.date.startsWith(targetMonth));
 
-    const config = await Store.getByKey('settings', 'attendance_config') || {};
-    const startTime = config.workStartTime || '';
-    const endTime = config.workEndTime || '';
+    const { startTime, endTime } = await Excel._getWorkTimes();
 
     return Excel._apiExport('/api/export/calendar', {
       targetMonth: targetMonth,

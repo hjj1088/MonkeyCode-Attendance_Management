@@ -13,8 +13,8 @@ def handle_migrate(handler):
     if payload is None:
         handler._send_json(401, message='令牌无效或已过期')
         return
-    if payload.get('role') != 'hradmin':
-        handler._send_json(403, message='仅人事管理员可执行迁移')
+    if payload.get('role') != 'superadmin':
+        handler._send_json(403, message='仅超级管理员可执行迁移')
         return
 
     body = handler._read_body()
@@ -50,21 +50,25 @@ def _migrate_records(conn, data, report):
             'applicant': 'applicant', 'department': 'department', 'leaveType': 'leaveType',
             'startDate': 'startDate', 'endDate': 'endDate',
             'leaveDays': 'leaveDays', 'leaveHours': 'leaveHours', 'reason': 'reason',
+            'isSelf': 'isSelf', 'subject': 'subject',
         }),
         ('overtime_records', 'overtime', {
             'applicant': 'applicant', 'department': 'department',
             'overtimeHours': 'overtimeHours', 'content': 'content',
             'startTime': 'startTime', 'endTime': 'endTime',
+            'isSelf': 'isSelf', 'subject': 'subject',
         }),
         ('travel_records', 'travel', {
             'applicant': 'applicant', 'department': 'department', 'destination': 'destination',
             'startDate': 'startDate', 'endDate': 'endDate', 'reason': 'reason',
             'travelers': 'travelers', 'travelType': 'travelType',
+            'isSelf': 'isSelf', 'subject': 'subject',
         }),
         ('miss_punch_records', 'miss_punch', {
             'applicant': 'applicant', 'department': 'department',
             'missDate': 'missDate', 'reason': 'reason',
             'missPerson': 'missPerson', 'missTime': 'missTime', 'cardTime': 'cardTime',
+            'isSelf': 'isSelf', 'subject': 'subject',
         }),
         ('schedules', 'schedule', {
             'employeeNo': 'employeeNo', 'name': 'name', 'department': 'department',

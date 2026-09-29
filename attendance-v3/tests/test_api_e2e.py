@@ -77,7 +77,7 @@ def test_login_admin():
     assert status == 200
     assert body['code'] == 0
     SESSION_TOKEN['admin'] = body['data']['token']
-    assert body['data']['user']['role'] == 'hradmin'
+    assert body['data']['user']['role'] == 'superadmin'
     assert body['data']['need_change_password'] is True
 
 
@@ -179,3 +179,70 @@ def test_change_password_then_old_fails():
     assert status == 200
     assert body['data']['need_change_password'] is False
     SESSION_TOKEN['admin'] = body['data']['token']
+
+
+def _get_user_id(username):
+    status, body = _api('GET', '/api/users', token=SESSION_TOKEN['admin'])
+    for u in body['data']:
+        if u['username'] == username:
+            return u['id']
+    return None
+
+
+def test_delete_user_success():
+    _api('POST', '/api/users', {'username': 'deleteme', 'name': '待删者', 'department': '行政部',
+                                'role': 'employee', 'password': '123456'}, token=SESSION_TOKEN['admin'])
+    user_id = _get_user_id('deleteme')
+    assert user_id is not None
+
+    status, body = _api('DELETE', '/api/users/{}'.format(user_id), token=SESSION_TOKEN['admin'])
+    assert status == 200
+    assert body['code'] == 0
+
+    assert _get_user_id('deleteme') is None
+
+
+def test_disable_admin_rejected():
+    admin_id = _get_user_id('admin')
+    status, body = _api('PATCH', '/api/users/{}/status'.format(admin_id), {'enabled': 0},
+                        token=SESSION_TOKEN['admin'])
+    assert status == 403
+    assert '不可禁用' in body['message']
+
+    # admin 仍可正常登录
+    status, body = _api('POST', '/api/auth/login', {'username': 'admin', 'password': 'NewAdmin@2026'})
+    assert status == 200
+
+
+def test_delete_admin_rejected():
+    admin_id = _get_user_id('admin')
+    status, body = _api('DELETE', '/api/users/{}'.format(admin_id), token=SESSION_TOKEN['admin'])
+    assert status == 403
+    assert '不可删除' in body['message']
+
+
+def test_delete_self_rejected():
+    # 创建一个 hradmin，登录后尝试删除自己
+    _api('POST', '/api/users', {'username': 'hrself', 'name': '自删者', 'department': '人事部',
+                                'role': 'hradmin', 'password': '123456'}, token=SESSION_TOKEN['admin'])
+    status, body = _api('POST', '/api/auth/login', {'username': 'hrself', 'password': '123456'})
+    hr_token = body['data']['token']
+    hr_id = _get_user_id('hrself')
+
+    status, body = _api('DELETE', '/api/users/{}'.format(hr_id), token=hr_token)
+    assert status == 400
+    assert '不能删除自己' in body['message']
+
+
+def test_delete_requires_admin():
+    _api('POST', '/api/users', {'username': 'emp2', 'name': '员工2', 'department': '技术部',
+                                'role': 'employee', 'password': '123456'}, token=SESSION_TOKEN['admin'])
+    status, body = _api('POST', '/api/auth/login', {'username': 'emp2', 'password': '123456'})
+    emp_token = body['data']['token']
+
+    _api('POST', '/api/users', {'username': 'victim', 'name': '受害者', 'department': '技术部',
+                                'role': 'employee', 'password': '123456'}, token=SESSION_TOKEN['admin'])
+    victim_id = _get_user_id('victim')
+
+    status, body = _api('DELETE', '/api/users/{}'.format(victim_id), token=emp_token)
+    assert status == 403

@@ -35,18 +35,22 @@ TABLE_COLUMNS = {
     'leave_records': [
         'applicant', 'department', 'leaveType', 'startDate',
         'endDate', 'leaveDays', 'leaveHours', 'reason',
+        'isSelf', 'subject',
     ],
     'overtime_records': [
         'applicant', 'department', 'startTime', 'endTime',
         'overtimeHours', 'content',
+        'isSelf', 'subject',
     ],
     'travel_records': [
         'applicant', 'department', 'startDate', 'endDate',
         'destination', 'reason', 'travelers', 'travelType',
+        'isSelf', 'subject',
     ],
     'miss_punch_records': [
         'applicant', 'department', 'missDate', 'missPerson',
         'missTime', 'cardTime', 'reason',
+        'isSelf', 'subject',
     ],
     'schedules': [
         'employeeNo', 'name', 'department', 'year', 'month',
@@ -196,7 +200,7 @@ def handle_import(handler):
                 conn.execute(
                     "INSERT INTO settings (key, value) VALUES ('last_punch_month', ?) "
                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    (months[0],)
+                    (months[-1],)
                 )
 
         conn.execute(
@@ -289,7 +293,7 @@ def handle_attendance_all(handler):
     if role == 'deptadmin':
         conditions.append('department = ?')
         values.append(department)
-    elif role == 'hradmin':
+    elif role in ('hradmin', 'superadmin'):
         if filter_department:
             conditions.append('department = ?')
             values.append(filter_department)
@@ -342,6 +346,7 @@ def handle_attendance_calculate(handler):
 
     conn = get_db()
     conn.execute("DELETE FROM attendance_results WHERE month = ?", (month,))
+    conn.execute("DELETE FROM carry_over WHERE month = ?", (month,))
 
     columns = [
         'employeeNo', 'name', 'department', 'date', 'month', 'status',
@@ -393,7 +398,7 @@ def handle_attendance_review(handler, result_id):
     if payload is None:
         return
     role = payload.get('role', '')
-    if role not in ('deptadmin', 'hradmin'):
+    if role not in ('deptadmin', 'hradmin', 'superadmin'):
         handler._send_json(403, message='无权限执行确认操作')
         return
 
@@ -449,7 +454,7 @@ def handle_dept_submit(handler):
     if payload is None:
         return
     role = payload.get('role', '')
-    if role not in ('deptadmin', 'hradmin'):
+    if role not in ('deptadmin', 'hradmin', 'superadmin'):
         handler._send_json(403, message='无权限提交部门数据')
         return
 
@@ -459,7 +464,7 @@ def handle_dept_submit(handler):
     department = payload.get('department', '')
 
     conn = get_db()
-    if role == 'hradmin':
+    if role in ('hradmin', 'superadmin'):
         result = conn.execute(
             "UPDATE attendance_results SET review_status = 'submitted' WHERE month = ? AND review_status = 'confirmed'",
             (month,)
@@ -485,7 +490,7 @@ def handle_attendance_lock(handler):
     payload = _require_any_user(handler)
     if payload is None:
         return
-    if payload.get('role') != 'hradmin':
+    if payload.get('role') not in ('hradmin', 'superadmin'):
         handler._send_json(403, message='仅人事管理员可锁定数据')
         return
 
@@ -526,7 +531,7 @@ def handle_attendance_summary(handler):
     payload = _require_any_user(handler)
     if payload is None:
         return
-    if payload.get('role') != 'hradmin':
+    if payload.get('role') not in ('hradmin', 'superadmin'):
         handler._send_json(403, message='仅人事管理员可查看汇总')
         return
 
@@ -655,19 +660,24 @@ def handle_overtime_all_get(handler):
 
 
 def handle_data_month(handler):
-    auth_header = handler.headers.get('Authorization', '')
-    token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
-    if not token:
-        handler._send_json(401, message='未提供认证令牌'); return
-    payload = verify_token(token)
-    if payload is None:
-        handler._send_json(401, message='令牌无效或已过期'); return
+    if _require_any_user(handler) is None:
+        return
+    from datetime import datetime
     conn = get_db()
-    row = conn.execute("SELECT date FROM punch_records ORDER BY date DESC LIMIT 1").fetchone()
-    conn.close()
-    if row and row['date']:
-        m = row['date'][:7]
-        handler._send_json(0, data={'month': m})
-    else:
-        from datetime import datetime
+    try:
+        row = conn.execute("SELECT value FROM settings WHERE key = 'last_punch_month'").fetchone()
+        m = (row['value'] if row else None) or ''
+        if isinstance(m, str):
+            m = m.strip().strip('"')
+        else:
+            m = str(m) if m else ''
+        if m and len(m) >= 7:
+            handler._send_json(0, data={'month': m[:7]})
+            return
+        row = conn.execute("SELECT date FROM punch_records ORDER BY date DESC LIMIT 1").fetchone()
+        if row and row['date']:
+            handler._send_json(0, data={'month': row['date'][:7]})
+            return
         handler._send_json(0, data={'month': datetime.now().strftime('%Y-%m')})
+    finally:
+        conn.close()

@@ -67,7 +67,7 @@ def test_ensure_admin_user():
     user = database.get_user_by_username(conn, 'admin')
     conn.close()
     assert user is not None
-    assert user['role'] == 'hradmin'
+    assert user['role'] == 'superadmin'
     assert bcrypt.checkpw('admin123'.encode(), user['password_hash'].encode())
 
 
@@ -82,4 +82,4 @@ def test_ensure_admin_user_idempotent():
     user = database.get_user_by_username(conn, 'admin')
     conn.close()
     assert user is not None
-    assert user['role'] == 'hradmin'
+    assert user['role'] == 'superadmin'

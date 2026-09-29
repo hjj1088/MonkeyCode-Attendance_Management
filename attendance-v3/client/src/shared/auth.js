@@ -53,7 +53,7 @@ const Auth = {
   logout() {
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
-    _redirectToLogin();
+    window.location.href = 'login';
   },
 };
 

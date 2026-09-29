@@ -8,7 +8,7 @@ from database import get_db
 from middleware import verify_token
 
 SERVER_START_TIME = None
-APP_VERSION = '3.1.0'
+APP_VERSION = '3.2.0'
 
 
 def set_start_time():
@@ -28,7 +28,7 @@ def _get_admin_user(conn):
 def handle_system_version(handler):
     handler._send_json(0, data={
         'app_version': APP_VERSION,
-        'version_name': 'V3.1',
+        'version_name': 'V3.2',
     })
 
 
@@ -43,7 +43,7 @@ def handle_system_status(handler):
     if payload is None:
         handler._send_json(401, message='令牌无效或已过期')
         return
-    if payload.get('role') != 'hradmin':
+    if payload.get('role') != 'superadmin':
         handler._send_json(403, message='无权限访问')
         return
 
@@ -88,7 +88,7 @@ def handle_check_default_password(handler):
     if payload is None:
         handler._send_json(401, message='令牌无效或已过期')
         return
-    if payload.get('role') != 'hradmin':
+    if payload.get('role') != 'superadmin':
         handler._send_json(403, message='无权限访问')
         return
 
@@ -113,7 +113,7 @@ def handle_admin_password(handler):
     if payload is None:
         handler._send_json(401, message='令牌无效或已过期')
         return
-    if payload.get('role') != 'hradmin':
+    if payload.get('role') != 'superadmin':
         handler._send_json(403, message='无权限访问')
         return
 
@@ -163,7 +163,7 @@ def handle_system_config(handler):
     if payload is None:
         handler._send_json(401, message='令牌无效或已过期')
         return
-    if payload.get('role') != 'hradmin':
+    if payload.get('role') != 'superadmin':
         handler._send_json(403, message='无权限访问')
         return
 
@@ -184,7 +184,7 @@ def handle_system_config_update(handler):
     if payload is None:
         handler._send_json(401, message='令牌无效或已过期')
         return
-    if payload.get('role') != 'hradmin':
+    if payload.get('role') != 'superadmin':
         handler._send_json(403, message='无权限访问')
         return
 
@@ -207,7 +207,7 @@ def handle_system_config_update(handler):
     handler._send_json(0, data={'message': '配置已更新'})
 
 
-def _require_hradmin(handler):
+def _require_superadmin(handler):
     auth_header = handler.headers.get('Authorization', '')
     token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
     if not token:
@@ -217,14 +217,14 @@ def _require_hradmin(handler):
     if payload is None:
         handler._send_json(401, message='令牌无效或已过期')
         return None
-    if payload.get('role') != 'hradmin':
+    if payload.get('role') != 'superadmin':
         handler._send_json(403, message='无权限访问')
         return None
     return payload
 
 
 def handle_seed_test_data(handler):
-    payload = _require_hradmin(handler)
+    payload = _require_superadmin(handler)
     if payload is None:
         return
 
@@ -306,7 +306,7 @@ def handle_seed_test_data(handler):
 
 
 def handle_reset_data(handler):
-    payload = _require_hradmin(handler)
+    payload = _require_superadmin(handler)
     if payload is None:
         return
 

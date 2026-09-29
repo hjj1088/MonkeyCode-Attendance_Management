@@ -84,7 +84,7 @@ class TestDefaultPasswordDetection:
         ensure_admin_user()
 
         h = MockHandler()
-        h.headers = {'Authorization': 'Bearer ' + self._token('admin', 'hradmin')}
+        h.headers = {'Authorization': 'Bearer ' + self._token('admin', 'superadmin')}
         handle_check_default_password(h)
         assert h.sent['code'] == 0
         assert h.sent['data']['is_default'] is True
@@ -97,13 +97,13 @@ class TestDefaultPasswordDetection:
         ensure_admin_user()
 
         h0 = MockHandler()
-        h0.headers = {'Authorization': 'Bearer ' + self._token('admin', 'hradmin')}
+        h0.headers = {'Authorization': 'Bearer ' + self._token('admin', 'superadmin')}
         h0._body = json.dumps({'current_password': 'admin123', 'new_password': 'NewP@ssw0rd!'})
         handle_admin_password(h0)
         assert h0.sent['code'] == 0
 
         h1 = MockHandler()
-        h1.headers = {'Authorization': 'Bearer ' + self._token('admin', 'hradmin')}
+        h1.headers = {'Authorization': 'Bearer ' + self._token('admin', 'superadmin')}
         handle_check_default_password(h1)
         assert h1.sent['data']['is_default'] is False
 
@@ -115,7 +115,7 @@ class TestDefaultPasswordDetection:
         ensure_admin_user()
 
         h0 = MockHandler()
-        h0.headers = {'Authorization': 'Bearer ' + self._token('admin', 'hradmin')}
+        h0.headers = {'Authorization': 'Bearer ' + self._token('admin', 'superadmin')}
         h0._body = json.dumps({'current_password': 'admin123', 'new_password': 'NewP@ssw0rd!'})
         handle_admin_password(h0)
         assert h0.sent['code'] == 0
@@ -135,7 +135,7 @@ class TestDefaultPasswordDetection:
         ensure_admin_user()
 
         h0 = MockHandler()
-        h0.headers = {'Authorization': 'Bearer ' + self._token('admin', 'hradmin')}
+        h0.headers = {'Authorization': 'Bearer ' + self._token('admin', 'superadmin')}
         h0._body = json.dumps({'current_password': 'admin123', 'new_password': 'NewP@ssw0rd!'})
         handle_admin_password(h0)
         assert h0.sent['code'] == 0

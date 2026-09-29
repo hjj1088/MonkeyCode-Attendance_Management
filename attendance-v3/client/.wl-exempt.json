@@ -1,0 +1,9 @@
+{
+  "exemptPaths": [],
+  "exemptRules": {
+    "R026": ["src/**"],
+    "R009": ["src/views/ExportView.vue"]
+  },
+  "exemptCategories": [],
+  "description": "本项目为 Vue 3 + 原生 HTML + 自研 bigsur.css 设计系统，未使用 Element Plus。R026 要求将原生 table/input/select/button 替换为 el-* 组件，与本项目架构与视觉体系冲突，属有意选择，故整体豁免。R009 在 ExportView.vue 命中的是「可导出字段清单」的标签项，并非状态单元格渲染，属误报。其余与 Element Plus 无关的通用规则（R016/R017/R018 颜色 token、R028 圆角 token、R039 超长省略）保持启用。"
+}

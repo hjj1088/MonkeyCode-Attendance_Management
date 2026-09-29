@@ -12,7 +12,7 @@
     <div v-if="tab === 'general'" class="card">
       <div class="card-header">
         <h2 class="card-title">常规配置</h2>
-        <button @click="saveGeneral" class="btn btn-primary">保存设置</button>
+        <button @click="saveGeneral" class="btn btn-primary"><AppIcon name="save" /><span>保存设置</span></button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="form-group">
@@ -29,7 +29,7 @@
     <div v-else-if="tab === 'password'" class="card">
       <div class="card-header">
         <h2 class="card-title">管理员密码</h2>
-        <button @click="savePassword" class="btn btn-primary">确认修改</button>
+        <button @click="savePassword" class="btn btn-primary"><AppIcon name="key" /><span>确认修改</span></button>
       </div>
       <div style="display:grid;grid-template-columns:1fr;gap:16px;max-width:420px">
         <div class="form-group">
@@ -48,7 +48,7 @@
       <div v-if="status" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
         <div class="form-group" style="margin:0">
           <label class="form-label">应用版本</label>
-          <div class="stat-value">V3.1.0</div>
+          <div class="stat-value">V3.2.0</div>
         </div>
         <div class="form-group" style="margin:0">
           <label class="form-label">数据库大小</label>
@@ -74,13 +74,13 @@
 
     <div v-else class="card">
       <h2 class="card-title mb-md">数据管理</h2>
-      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">生成演示数据（员工/打卡/请假），或清空所有业务数据（保留用户与配置）。</p>
+      <p class="hint-text">生成演示数据（员工/打卡/请假），或清空所有业务数据（保留用户与配置）。</p>
       <div class="flex gap-sm">
         <button @click="seedTestData" :disabled="seeding" class="btn btn-primary">
-          {{ seeding ? '生成中...' : '生成测试数据' }}
+          <AppIcon name="database" /><span>{{ seeding ? '生成中...' : '生成测试数据' }}</span>
         </button>
-        <button @click="resetDB" :disabled="resetting" class="btn btn-secondary" style="color:var(--vermillion);border-color:var(--vermillion)">
-          {{ resetting ? '重置中...' : '重置数据库' }}
+        <button @click="resetDB" :disabled="resetting" class="btn btn-danger">
+          <AppIcon name="trash" /><span>{{ resetting ? '重置中...' : '重置数据库' }}</span>
         </button>
       </div>
       <div v-if="dataMsg" style="margin-top:12px;font-size:13px;color:var(--jade)">{{ dataMsg }}</div>
@@ -90,6 +90,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import AppIcon from '../components/AppIcon.vue';
 import { apiRequest } from '../shared/api';
 
 const tab = ref('general');
@@ -185,5 +186,6 @@ async function resetDB() {
 
 <style scoped>
 .stat-value { font-size: 15px; font-weight: 600; }
-.section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.section-title { font-size: 13px; font-weight: 600; color: var(--ink-secondary); }
+.hint-text { font-size: 13px; color: var(--ink-secondary); margin-bottom: 12px; }
 </style>

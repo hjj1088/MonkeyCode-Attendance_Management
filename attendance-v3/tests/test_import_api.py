@@ -124,6 +124,29 @@ def test_import_leave_and_query(e2e_server):
     assert len(body['data']) == 1
     assert body['data'][0]['applicant'] == '张三'
     assert body['data'][0]['leaveType'] == '年假'
+    assert body['data'][0]['isSelf'] == ''
+    assert body['data'][0]['subject'] == ''
+
+
+def test_import_leave_proxy_subject(e2e_server):
+    client = e2e_server
+    status, body = client.call('POST', '/api/attendance/import',
+                               {'type': 'leave',
+                                'records': [{'applicant': '李四', 'department': '技术部',
+                                             'leaveType': '事假', 'startDate': '2026-07-04',
+                                             'endDate': '2026-07-04', 'leaveDays': 1,
+                                             'reason': '代申请', 'isSelf': '非本人',
+                                             'subject': '张三'}],
+                                'file_name': 'l_proxy.xlsx'},
+                               token=client.admin_token)
+    assert status == 200
+    assert body['data']['imported'] == 1
+
+    status, body = client.call('GET', '/api/store/leave_records', token=client.admin_token)
+    proxy = [r for r in body['data'] if r.get('isSelf') == '非本人']
+    assert len(proxy) == 1
+    assert proxy[0]['applicant'] == '李四'
+    assert proxy[0]['subject'] == '张三'
 
 
 def test_import_unknown_type_rejected(e2e_server):

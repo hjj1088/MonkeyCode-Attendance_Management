@@ -1,5 +1,5 @@
 import bcrypt
-from database import get_db, get_user_by_username, reset_login_attempts, increment_login_attempt, clear_locked_if_expired
+from database import get_db, get_user_by_username, reset_login_attempts, increment_login_attempt, clear_locked_if_expired, clear_stale_attempts
 from middleware import generate_token, verify_token, _send_json
 
 
@@ -9,7 +9,10 @@ def ensure_admin_user():
     if not user:
         from database import create_user
         password_hash = bcrypt.hashpw('admin123'.encode(), bcrypt.gensalt()).decode()
-        create_user(conn, 'admin', password_hash, '系统管理员', '总部', 'hradmin')
+        create_user(conn, 'admin', password_hash, '系统管理员', '总部', 'superadmin')
+    elif user['role'] != 'superadmin':
+        conn.execute("UPDATE users SET role = 'superadmin' WHERE username = 'admin'")
+        conn.commit()
     conn.close()
 
 
@@ -43,15 +46,18 @@ def handle_login(handler):
         from datetime import datetime
         if datetime.fromisoformat(user['locked_until']) > datetime.now():
             conn.close()
-            handler._send_json(1, message='账号已被锁定，请稍后再试')
+            handler._send_json(1, message='密码错误次数过多，账号已锁定24小时')
             return
         clear_locked_if_expired(conn, user['id'])
+
+    # 失败计数超过1天未再失败，自动清零
+    clear_stale_attempts(conn, user['id'])
 
     if not bcrypt.checkpw(password.encode(), user['password_hash'].encode()):
         attempt_info = increment_login_attempt(conn, user['id'])
         conn.close()
         if attempt_info['login_attempts'] >= 5:
-            handler._send_json(1, message='密码错误次数过多，账号已锁定30分钟')
+            handler._send_json(1, message='密码错误次数过多，账号已锁定24小时')
         else:
             handler._send_json(1, message='账号或密码错误')
         return
@@ -60,7 +66,7 @@ def handle_login(handler):
     conn.close()
 
     need_change = False
-    if user['username'] == 'admin' and user['role'] == 'hradmin':
+    if user['username'] == 'admin' and user['role'] == 'superadmin':
         need_change = bcrypt.checkpw('admin123'.encode(), user['password_hash'].encode())
 
     token = generate_token(user['id'], user['username'], user['role'], user['department'])

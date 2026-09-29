@@ -30,13 +30,16 @@ const LEAVES = [
     startDate: '2026-08-15', endDate: '2026-08-15', leaveDays: 1, leaveHours: 0, reason: '' },
   { applicant: '张三', department: '技术部', leaveType: '调休',
     startDate: '2026-08-16', endDate: '2026-08-16', leaveDays: 0, leaveHours: 1, reason: '' },
+  { applicant: '李四', department: '技术部', leaveType: '年假',
+    startDate: '2026-08-17', endDate: '2026-08-17', leaveDays: 1, leaveHours: 0, reason: '',
+    isSelf: '非本人', subject: '张三' },
 ];
 
 const SCHEDULES = [
   { employeeNo: 'E001', name: '张三', department: '技术部', year: 2026, month: 8, workDays: ALL_WORKDAYS },
 ];
 
-const captured = { calc: null };
+const captured = { calc: null, fetches: [] };
 
 const sessionStorage = {
   _d: {},
@@ -57,6 +60,7 @@ function jsonRes(data) {
 globalThis.fetch = (input, init) => {
   const url = String(input);
   const method = (init && init.method) || 'GET';
+  captured.fetches.push(method + ' ' + url);
 
   if (method === 'POST' && url === '/api/attendance/calculate') {
     captured.calc = JSON.parse(init.body);
@@ -107,6 +111,9 @@ assert.strictEqual(leaveDay.leaveType, '年假');
 const tiaoDay = rowFor('2026-08-16');
 assert.strictEqual(tiaoDay.status, 'leave', 'comp-off day should be leave');
 assert.strictEqual(tiaoDay.leaveType, '调休');
+const proxyDay = rowFor('2026-08-17');
+assert.strictEqual(proxyDay.status, 'leave', 'proxy leave should match subject');
+assert.strictEqual(proxyDay.leaveType, '年假');
 
 // 2. 容错豁免：月内 2 次迟到共 25min ≤ 30min → 恢复 normal 且 lateMinutes 归零
 const late1 = rowFor('2026-08-10');
@@ -126,5 +133,9 @@ assert.ok(captured.calc, 'should POST /attendance/calculate');
 const e001Carry = captured.calc.carry_over.find(c => c.employeeNo === 'E001');
 assert.ok(e001Carry, 'carry_over should include E001');
 assert.strictEqual(e001Carry.overtimeBalance, 2, 'balance = 3 - 1');
+
+// 5. Store 往返是常数：禁止按人串行 getByIndex
+assert.ok(captured.fetches.length <= 12, 'store roundtrips should be O(1), got ' + captured.fetches.length);
+assert.ok(!captured.fetches.some(u => u.includes('index=employeeNo') || u.includes('index=year')), 'must not query store by per-employee index');
 
 console.log('PASS calc_flow: leave/travel, grace waiver, overtime, carry-over balance');

@@ -16,7 +16,7 @@ DEFAULT_CONFIG = {
 }
 
 
-def _require_hradmin(handler):
+def _require_admin(handler):
     auth_header = handler.headers.get('Authorization', '')
     token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
     if not token:
@@ -26,8 +26,8 @@ def _require_hradmin(handler):
     if payload is None:
         handler._send_json(401, message='令牌无效或已过期')
         return None
-    if payload.get('role') != 'hradmin':
-        handler._send_json(403, message='无权限访问')
+    if payload.get('role') not in ('hradmin', 'superadmin'):
+        handler._send_json(403, message='权限不足')
         return None
     return payload
 
@@ -56,7 +56,7 @@ def _set_config(conn, cfg):
 
 
 def handle_rules_config_get(handler):
-    payload = _require_hradmin(handler)
+    payload = _require_admin(handler)
     if payload is None:
         return
     conn = get_db()
@@ -71,7 +71,7 @@ def handle_rules_config_get(handler):
 
 
 def handle_rules_config_put(handler):
-    payload = _require_hradmin(handler)
+    payload = _require_admin(handler)
     if payload is None:
         return
     body = handler._read_body()
@@ -90,7 +90,7 @@ def handle_rules_config_put(handler):
 
 
 def handle_tolerance_get(handler):
-    payload = _require_hradmin(handler)
+    payload = _require_admin(handler)
     if payload is None:
         return
     conn = get_db()
@@ -103,7 +103,7 @@ def handle_tolerance_get(handler):
 
 
 def handle_tolerance_put(handler):
-    payload = _require_hradmin(handler)
+    payload = _require_admin(handler)
     if payload is None:
         return
     body = handler._read_body()
@@ -122,7 +122,7 @@ def handle_tolerance_put(handler):
 
 
 def handle_holidays_get(handler):
-    payload = _require_hradmin(handler)
+    payload = _require_admin(handler)
     if payload is None:
         return
     conn = get_db()
@@ -144,7 +144,7 @@ def handle_holidays_get(handler):
 
 
 def handle_holidays_post(handler):
-    payload = _require_hradmin(handler)
+    payload = _require_admin(handler)
     if payload is None:
         return
     body = handler._read_body()
@@ -161,14 +161,20 @@ def handle_holidays_post(handler):
 
     conn = get_db()
     count = 0
+    is_wd = 1 if is_workday else 0
+    is_hd = 0 if is_workday else 1
     for date_str in dates:
         existing = conn.execute("SELECT id FROM holidays WHERE date = ?", (date_str,)).fetchone()
         if existing:
-            continue
-        conn.execute(
-            "INSERT INTO holidays (date, name, isWorkday, isHoliday) VALUES (?, ?, ?, ?)",
-            (date_str, name, 1 if is_workday else 0, 0 if is_workday else 1)
-        )
+            conn.execute(
+                "UPDATE holidays SET name = ?, isWorkday = ?, isHoliday = ? WHERE date = ?",
+                (name, is_wd, is_hd, date_str)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO holidays (date, name, isWorkday, isHoliday) VALUES (?, ?, ?, ?)",
+                (date_str, name, is_wd, is_hd)
+            )
         count += 1
     conn.commit()
     conn.close()
@@ -176,7 +182,7 @@ def handle_holidays_post(handler):
 
 
 def handle_holidays_delete(handler):
-    payload = _require_hradmin(handler)
+    payload = _require_admin(handler)
     if payload is None:
         return
     import re

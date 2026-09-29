@@ -4,7 +4,7 @@
 import Store from './store';
 import { apiRequest } from './api';
 
-export const RULES_VERSION = '1.0.28';
+export const RULES_VERSION = '1.0.29';
 
 export const RulesEngine = {
   async getConfig() {
@@ -25,10 +25,22 @@ export const RulesEngine = {
 
   _trimName(n) { return (n || '').replace(/\s+/g, ''); },
 
-  _matchOA(oaRecords, employeeName, dateStr, dateStartField, dateEndField) {
+  _oaNames(r) {
+    const raw = r.subject || r.applicant || '';
+    const names = String(raw).split(/[,，、;；/／]+/).map(n => this._trimName(n)).filter(Boolean);
+    const miss = this._trimName(r.missPerson);
+    if (miss && !names.includes(miss)) names.push(miss);
+    return names;
+  },
+
+  _matchOAName(r, employeeName) {
     const name = this._trimName(employeeName);
+    return this._oaNames(r).includes(name);
+  },
+
+  _matchOA(oaRecords, employeeName, dateStr, dateStartField, dateEndField) {
     return oaRecords.filter(r => {
-      if (this._trimName(r.applicant) !== name) return false;
+      if (!this._matchOAName(r, employeeName)) return false;
       const start = r[dateStartField] || r.startDate || '';
       const end = r[dateEndField] || start;
       if (!start) return false;
@@ -82,9 +94,6 @@ export const RulesEngine = {
   },
 
   async calculateMonth(targetMonth) {
-    const config = await this.getConfig();
-    const holidaysData = await this.getHolidays();
-
     const [yearStr, monthStr] = targetMonth.split('-');
     const targetYear = parseInt(yearStr);
     const targetMonthNum = parseInt(monthStr);
@@ -93,13 +102,23 @@ export const RulesEngine = {
     const lastDay = new Date(targetYear, targetMonthNum, 0).getDate();
     const endDate = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
 
-    const punchRecords = await Store.getByRange('punch_records', 'date', startDate, endDate);
-    const allLeaveRecords = await Store.getAll('leave_records');
+    const [
+      config, holidaysData, punchRecords, allLeaveRecords, allTravelRecords,
+      missPunchRecords, allOvertimeRecords, allSchedules, allCarry,
+    ] = await Promise.all([
+      this.getConfig(),
+      this.getHolidays(),
+      Store.getByRange('punch_records', 'date', startDate, endDate),
+      Store.getAll('leave_records'),
+      Store.getAll('travel_records'),
+      Store.getByRange('miss_punch_records', 'missDate', startDate, endDate),
+      Store.getAll('overtime_records'),
+      Store.getAll('schedules'),
+      Store.getAll('carry_over'),
+    ]);
+
     const leaveRecords = allLeaveRecords.filter(l => l.endDate >= startDate && l.startDate <= endDate);
-    const allTravelRecords = await Store.getAll('travel_records');
     const travelRecords = allTravelRecords.filter(t => t.endDate >= startDate && t.startDate <= endDate);
-    const missPunchRecords = await Store.getByRange('miss_punch_records', 'missDate', startDate, endDate);
-    const allOvertimeRecords = await Store.getAll('overtime_records');
     const overtimeRecords = allOvertimeRecords.filter(o => {
       const dateStr = (o.startTime || '').substring(0, 10);
       return dateStr >= startDate && dateStr <= endDate;
@@ -112,19 +131,26 @@ export const RulesEngine = {
       punchByEmployee[p.employeeNo].push(p);
     }
 
+    const scheduleByEmployee = {};
+    let yearMonthFallback = null;
+    for (const s of allSchedules) {
+      if (s.year === targetYear && s.month === targetMonthNum) {
+        if (s.employeeNo) scheduleByEmployee[s.employeeNo] = s;
+        if (!yearMonthFallback) yearMonthFallback = s;
+      }
+    }
+    const carryByEmployee = {};
+    for (const c of allCarry) {
+      if (!c.employeeNo) continue;
+      if (!carryByEmployee[c.employeeNo]) carryByEmployee[c.employeeNo] = [];
+      carryByEmployee[c.employeeNo].push(c);
+    }
+
     const results = [];
     const carryOverList = [];
 
     for (const [employeeNo, punches] of Object.entries(punchByEmployee)) {
-      const allSchedules = await Store.getByIndex('schedules', 'employeeNo', employeeNo);
-      const scheduleEntry = allSchedules.find(s => s.year === targetYear && s.month === targetMonthNum) || null;
-
-      let schedulesData = scheduleEntry || null;
-
-      if (!schedulesData) {
-        const allSchedulesYear = await Store.getByIndex('schedules', 'year', targetYear);
-        schedulesData = allSchedulesYear.find(s => s.month === targetMonthNum) || null;
-      }
+      const schedulesData = scheduleByEmployee[employeeNo] || yearMonthFallback || null;
       const lateRecords = [];
 
       const employeeName = punches[0].name;
@@ -170,9 +196,7 @@ export const RulesEngine = {
         let isRestDay = false;
 
         const dayMissRecords = missPunchRecords.filter(m =>
-          (m.missDate === dateStr) &&
-          (this._trimName(m.applicant) === this._trimName(employeeName) ||
-           this._trimName(m.missPerson) === this._trimName(employeeName))
+          (m.missDate === dateStr) && this._matchOAName(m, employeeName)
         );
         const missRecord = dayMissRecords[0] || null;
 
@@ -184,7 +208,7 @@ export const RulesEngine = {
 
         const dayOvertimeRecords = overtimeRecords.filter(o => {
           const oDate = (o.startTime || '').substring(0, 10);
-          return this._trimName(o.applicant) === this._trimName(employeeName) && oDate === dateStr;
+          return this._matchOAName(o, employeeName) && oDate === dateStr;
         });
         const overtimeRecord = dayOvertimeRecords[0] || null;
 
@@ -299,7 +323,7 @@ export const RulesEngine = {
         }
       }
 
-      await this._updateCarryOver(employeeNo, employeeName, targetMonth, monthTotalOvertime, leaveRecords, carryOverList);
+      this._updateCarryOver(employeeNo, employeeName, targetMonth, monthTotalOvertime, leaveRecords, carryOverList, carryByEmployee[employeeNo] || []);
     }
 
     await this._saveMonth(targetMonth, results, carryOverList);
@@ -307,9 +331,9 @@ export const RulesEngine = {
     return results;
   },
 
-  async _updateCarryOver(employeeNo, name, targetMonth, monthOvertime, leaveRecords, carryOverList) {
+  _updateCarryOver(employeeNo, name, targetMonth, monthOvertime, leaveRecords, carryOverList, empCarry) {
     const adjustmentHours = leaveRecords
-      .filter(l => l.leaveType && l.leaveType.includes('调休'))
+      .filter(l => l.leaveType && l.leaveType.includes('调休') && this._matchOAName(l, name))
       .reduce((sum, l) => sum + (l.leaveHours || 0), 0);
 
     const [yearStr, monthStr] = targetMonth.split('-');
@@ -321,8 +345,7 @@ export const RulesEngine = {
     }
     const prevMonthKey = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
 
-    const allCarry = await Store.getByIndex('carry_over', 'employeeNo', employeeNo);
-    const prevCarry = allCarry.find(c => c.month === prevMonthKey) || null;
+    const prevCarry = (empCarry || []).find(c => c.month === prevMonthKey) || null;
 
     const prevBalance = prevCarry ? prevCarry.overtimeBalance : 0;
     const newBalance = prevBalance + monthOvertime - adjustmentHours;
@@ -336,10 +359,6 @@ export const RulesEngine = {
   },
 
   async _saveMonth(month, results, carryOverList) {
-    const oldCarry = await Store.getByIndex('carry_over', 'month', month);
-    for (const c of oldCarry) {
-      if (c.id) await Store.deleteByKey('carry_over', c.id);
-    }
     await apiRequest('/attendance/calculate', {
       method: 'POST',
       body: JSON.stringify({ results, month, carry_over: carryOverList }),

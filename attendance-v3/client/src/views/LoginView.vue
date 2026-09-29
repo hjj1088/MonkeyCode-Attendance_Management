@@ -2,7 +2,7 @@
   <div class="login-page">
     <div class="login-card">
       <div class="flex-center mb-md">
-        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--vermillion)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+        <div class="login-logo-seal">勤</div>
       </div>
       <h1>考勤管理系统</h1>
       <p class="subtitle">Attendance Management</p>
@@ -20,9 +20,9 @@
       </div>
 
       <button class="btn btn-primary" style="width:100%;justify-content:center;" :disabled="loading" @click="handleLogin">
-        {{ loading ? '登录中...' : '登录' }}
+        <AppIcon name="log-in" /><span>{{ loading ? '登录中...' : '登录' }}</span>
       </button>
-      <div class="login-version" style="text-align:center;margin-top:16px;font-size:12px;color:var(--gray-5, #8a8f98);">V3.2 考勤管理系统</div>
+      <div class="login-version" style="text-align:center;margin-top:16px;font-size:12px;color:var(--ink-muted);">V3.2 考勤管理系统</div>
     </div>
   </div>
 </template>
@@ -30,6 +30,7 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
+import AppIcon from '../components/AppIcon.vue';
 import Auth from '../shared/auth';
 
 const router = useRouter();

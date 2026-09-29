@@ -296,11 +296,11 @@ createApp({
       return m[s] || s;
     },
     statusBadgeClass(s) {
-      const m = { normal:'badge-normal', rest:'', abnormal:'badge-late', leave:'badge-leave', travel:'badge-travel', absent:'badge-miss', overtime:'badge-early', suspect_ot:'badge-nosign', no_sign_in:'badge-nosign', no_sign_out:'badge-nosign' };
+      const m = { normal:'badge-normal', rest:'badge-rest', abnormal:'badge-late', leave:'badge-leave', travel:'badge-travel', absent:'badge-miss', overtime:'badge-nosign', suspect_ot:'badge-nosign', no_sign_in:'badge-nosign', no_sign_out:'badge-nosign' };
       return m[s] || 'badge-miss';
     },
     statusColor(s) {
-      const m = { normal:'var(--jade)', abnormal:'var(--vermillion)', leave:'var(--indigo)', travel:'var(--sandal)', absent:'var(--vermillion)', overtime:'var(--gold)', suspect_ot:'var(--sandal)' };
+      const m = { normal:'var(--jade)', rest:'var(--text-secondary)', abnormal:'var(--vermillion)', leave:'var(--indigo)', travel:'var(--sandal)', absent:'var(--vermillion)', overtime:'var(--vermillion)', suspect_ot:'var(--vermillion)', no_sign_in:'var(--vermillion)', no_sign_out:'var(--vermillion)' };
       return m[s] || 'var(--text-secondary)';
     },
     remarkText(r) {
@@ -408,7 +408,7 @@ createApp({
         else { let allRest = true, hasSched = false; const enos = [...new Set(this.results.map(r => r.employeeNo))]; for (const eno of enos) { const sch = scheduleMap[eno]; if (sch && sch.workDays) { hasSched = true; if (sch.workDays[dayStr]) allRest = false; } } isRest = hasSched && allRest; }
         let sc = 'cal-unknown';
         const fr = dayRecords[0];
-        if (fr) { if (fr.status === 'normal') sc = 'cal-normal'; else if (fr.status === 'rest') sc = 'cal-rest'; else if (fr.status === 'abnormal') sc = 'cal-abnormal'; else if (fr.status === 'no_sign_in' || fr.status === 'no_sign_out') sc = 'cal-abnormal'; else if (fr.status === 'leave') sc = 'cal-leave'; else if (fr.status === 'travel') sc = 'cal-travel'; else if (fr.status === 'absent') sc = 'cal-absent'; else if (fr.status === 'overtime') sc = 'cal-overtime'; else if (fr.status === 'suspect_ot') sc = 'cal-unknown'; }
+        if (fr) { if (fr.status === 'normal') sc = 'cal-normal'; else if (fr.status === 'rest') sc = 'cal-rest'; else if (fr.status === 'abnormal') sc = 'cal-abnormal'; else if (fr.status === 'no_sign_in' || fr.status === 'no_sign_out') sc = 'cal-abnormal'; else if (fr.status === 'leave') sc = 'cal-leave'; else if (fr.status === 'travel') sc = 'cal-travel'; else if (fr.status === 'absent') sc = 'cal-absent'; else if (fr.status === 'overtime' || fr.status === 'suspect_ot') sc = 'cal-overtime'; }
         else if (holidayName) sc = 'cal-holiday';
         else if (isRest) sc = 'cal-rest';
         cells.push({ key: ds, day: d, isRest, record: fr || null, statusClass: sc, holidayName });

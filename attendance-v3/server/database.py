@@ -66,7 +66,9 @@ def init_db():
             endDate TEXT NOT NULL DEFAULT '',
             leaveDays REAL NOT NULL DEFAULT 0,
             leaveHours REAL NOT NULL DEFAULT 0,
-            reason TEXT NOT NULL DEFAULT ''
+            reason TEXT NOT NULL DEFAULT '',
+            isSelf TEXT NOT NULL DEFAULT '',
+            subject TEXT NOT NULL DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS overtime_records (
@@ -76,7 +78,9 @@ def init_db():
             startTime TEXT NOT NULL DEFAULT '',
             endTime TEXT NOT NULL DEFAULT '',
             overtimeHours REAL NOT NULL DEFAULT 0,
-            content TEXT NOT NULL DEFAULT ''
+            content TEXT NOT NULL DEFAULT '',
+            isSelf TEXT NOT NULL DEFAULT '',
+            subject TEXT NOT NULL DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS travel_records (
@@ -88,7 +92,9 @@ def init_db():
             startDate TEXT NOT NULL DEFAULT '',
             endDate TEXT NOT NULL DEFAULT '',
             travelType TEXT NOT NULL DEFAULT '',
-            reason TEXT NOT NULL DEFAULT ''
+            reason TEXT NOT NULL DEFAULT '',
+            isSelf TEXT NOT NULL DEFAULT '',
+            subject TEXT NOT NULL DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS miss_punch_records (
@@ -99,7 +105,9 @@ def init_db():
             missPerson TEXT NOT NULL DEFAULT '',
             missTime TEXT NOT NULL DEFAULT '',
             cardTime TEXT NOT NULL DEFAULT '',
-            reason TEXT NOT NULL DEFAULT ''
+            reason TEXT NOT NULL DEFAULT '',
+            isSelf TEXT NOT NULL DEFAULT '',
+            subject TEXT NOT NULL DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS schedules (
@@ -184,10 +192,12 @@ def init_db():
             name TEXT NOT NULL DEFAULT '',
             department TEXT NOT NULL DEFAULT '',
             role TEXT NOT NULL DEFAULT 'employee',
+            employee_no TEXT NOT NULL DEFAULT '',
             password_hash TEXT NOT NULL DEFAULT '',
             enabled INTEGER NOT NULL DEFAULT 1,
             login_attempts INTEGER NOT NULL DEFAULT 0,
             locked_until TEXT,
+            last_failed_login TEXT,
             created_at TEXT NOT NULL DEFAULT '',
             updated_at TEXT NOT NULL DEFAULT ''
         );
@@ -237,7 +247,21 @@ def init_db():
     conn.close()
 
 
+def _ensure_columns(conn, table, columns):
+    existing = {row[1] for row in conn.execute("PRAGMA table_info({})".format(table)).fetchall()}
+    for col, spec in columns:
+        if col not in existing:
+            conn.execute("ALTER TABLE {} ADD COLUMN {} {}".format(table, col, spec))
+
+
 def _migrate(conn):
+    oa_extra = [
+        ('isSelf', "TEXT NOT NULL DEFAULT ''"),
+        ('subject', "TEXT NOT NULL DEFAULT ''"),
+    ]
+    for table in ('leave_records', 'overtime_records', 'travel_records', 'miss_punch_records'):
+        _ensure_columns(conn, table, oa_extra)
+
     results_cols = {row[1] for row in conn.execute("PRAGMA table_info(attendance_results)").fetchall()}
     if 'id' not in results_cols:
         conn.execute("""
@@ -302,6 +326,13 @@ def _migrate(conn):
         if col not in results_cols:
             default = "'pending_review'" if col == 'review_status' else "''"
             conn.execute("ALTER TABLE attendance_results ADD COLUMN {} TEXT NOT NULL DEFAULT {}".format(col, default))
+
+    users_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if 'employee_no' not in users_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN employee_no TEXT NOT NULL DEFAULT ''")
+        conn.execute("UPDATE users SET employee_no = username WHERE employee_no = ''")
+    if 'last_failed_login' not in users_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN last_failed_login TEXT")
 
 
 def _init_settings(conn):
@@ -402,17 +433,36 @@ def set_user_enabled(conn, user_id, enabled):
 def increment_login_attempt(conn, user_id):
     from datetime import datetime, timedelta
     conn.execute(
-        "UPDATE users SET login_attempts = login_attempts + 1 WHERE id = ?", (user_id,)
+        "UPDATE users SET login_attempts = login_attempts + 1, last_failed_login = ? WHERE id = ?",
+        (datetime.now().isoformat(timespec='seconds'), user_id)
     )
     row = conn.execute("SELECT login_attempts FROM users WHERE id = ?", (user_id,)).fetchone()
     attempts = row['login_attempts'] if row else 0
     if attempts >= 5:
-        locked_until = (datetime.now() + timedelta(minutes=30)).isoformat(timespec='seconds')
+        locked_until = (datetime.now() + timedelta(days=1)).isoformat(timespec='seconds')
         conn.execute(
             "UPDATE users SET locked_until = ? WHERE id = ?", (locked_until, user_id)
         )
     conn.commit()
     return {'login_attempts': attempts}
+
+
+def clear_stale_attempts(conn, user_id, max_age_days=1):
+    from datetime import datetime, timedelta
+    row = conn.execute(
+        "SELECT login_attempts, last_failed_login FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if not row:
+        return
+    if not row['login_attempts'] or not row['last_failed_login']:
+        return
+    try:
+        last_failed = datetime.fromisoformat(row['last_failed_login'])
+    except ValueError:
+        reset_login_attempts(conn, user_id)
+        return
+    if last_failed + timedelta(days=max_age_days) <= datetime.now():
+        reset_login_attempts(conn, user_id)
 
 
 def reset_login_attempts(conn, user_id):

@@ -40,9 +40,10 @@ export const Matcher = {
     const matches = [];
     for (let i = 0; i < (oaRecords || []).length; i++) {
       const rec = oaRecords[i];
-      const key = `${rec.applicant}|${rec.department}`;
+      const person = rec.subject || rec.applicant;
+      const key = `${person}|${rec.department}`;
       const employeeNo = nameDeptToNo[key] || null;
-      matches.push({ index: i, employeeNo, applicant: rec.applicant, department: rec.department });
+      matches.push({ index: i, employeeNo, applicant: rec.applicant, subject: person, department: rec.department });
     }
     return matches;
   },

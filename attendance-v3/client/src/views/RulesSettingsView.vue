@@ -11,7 +11,7 @@
     <div v-if="tab === 'time'" class="card">
       <div class="card-header">
         <h2 class="card-title">考勤时段配置</h2>
-        <button @click="saveTime" class="btn btn-primary">保存设置</button>
+        <button @click="saveTime" class="btn btn-primary"><AppIcon name="save" /><span>保存设置</span></button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="form-group">
@@ -36,7 +36,7 @@
     <div v-else-if="tab === 'tolerance'" class="card">
       <div class="card-header">
         <h2 class="card-title">容错规则配置</h2>
-        <button @click="saveTolerance" class="btn btn-primary">保存设置</button>
+        <button @click="saveTolerance" class="btn btn-primary"><AppIcon name="save" /><span>保存设置</span></button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="form-group">
@@ -72,14 +72,14 @@
             <option value="workday">调休上班日</option>
           </select>
         </div>
-        <button @click="addHolidays" class="btn btn-primary">批量添加</button>
+        <button @click="addHolidays" class="btn btn-primary"><AppIcon name="plus" /><span>批量添加</span></button>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <div v-for="h in holidays" :key="h.id" class="flex-between" style="padding:8px 12px;background:var(--paper);border-radius:var(--radius-sm)">
           <span style="font-size:13px">{{ h.date }} - {{ h.name }} <span class="badge" :class="h.isWorkday ? 'badge-normal' : 'badge-late'">{{ h.isWorkday ? '上班' : '休息' }}</span></span>
-          <button @click="deleteHoliday(h)" class="btn btn-ghost btn-sm" style="color:var(--vermillion)">删除</button>
+          <button @click="deleteHoliday(h)" class="btn btn-danger btn-sm"><AppIcon name="trash" :size="13" /><span>删除</span></button>
         </div>
-        <div v-if="holidays.length === 0" style="padding:16px;text-align:center;font-size:13px;color:var(--text-secondary)">暂无假期设置</div>
+        <div v-if="holidays.length === 0" class="empty-hint">暂无假期设置</div>
       </div>
     </div>
   </div>
@@ -87,6 +87,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import AppIcon from '../components/AppIcon.vue';
 import { apiRequest } from '../shared/api';
 import Store from '../shared/store';
 
@@ -113,7 +114,11 @@ async function loadConfig() {
 }
 
 async function loadHolidays() {
-  holidays.value = await apiRequest('/rules/holidays');
+  try {
+    holidays.value = await apiRequest('/rules/holidays');
+  } catch (e) {
+    holidays.value = [];
+  }
 }
 
 function showSaved() {
@@ -126,6 +131,9 @@ async function touchConfigUpdatedAt() {
 }
 
 async function saveTime() {
+  const cur = await apiRequest('/rules/config');
+  const changed = ['workStartTime', 'workEndTime', 'lateThreshold', 'earlyThreshold']
+    .some(k => String(cur[k] ?? '') !== String(config.value[k] ?? ''));
   await apiRequest('/rules/config', {
     method: 'PUT',
     body: JSON.stringify({
@@ -135,11 +143,14 @@ async function saveTime() {
       earlyThreshold: config.value.earlyThreshold,
     }),
   });
-  await touchConfigUpdatedAt();
+  if (changed) await touchConfigUpdatedAt();
   showSaved();
 }
 
 async function saveTolerance() {
+  const cur = await apiRequest('/rules/tolerance');
+  const changed = ['graceTimes', 'graceMinutes']
+    .some(k => String(cur[k] ?? '') !== String(config.value[k] ?? ''));
   await apiRequest('/rules/tolerance', {
     method: 'PUT',
     body: JSON.stringify({
@@ -147,35 +158,62 @@ async function saveTolerance() {
       graceMinutes: config.value.graceMinutes,
     }),
   });
-  await touchConfigUpdatedAt();
+  if (changed) await touchConfigUpdatedAt();
   showSaved();
+}
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+function localDateStr(d) {
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
 }
 
 async function addHolidays() {
   const start = newHoliday.value.startDate;
   const end = newHoliday.value.endDate || start;
-  if (!start) return;
-  if (start > end) { alert('结束日期不能早于开始日期'); return; }
+  if (!start) {
+    alert('请选择开始日期');
+    return;
+  }
+  if (start > end) {
+    alert('结束日期不能早于开始日期');
+    return;
+  }
   const isWorkday = newHoliday.value.type === 'workday';
   const name = newHoliday.value.name || (isWorkday ? '调休上班' : '假期');
   const dates = [];
   const sd = new Date(start + 'T00:00:00');
   const ed = new Date(end + 'T00:00:00');
   for (let d = new Date(sd); d <= ed; d.setDate(d.getDate() + 1)) {
-    dates.push(d.toISOString().slice(0, 10));
+    dates.push(localDateStr(d));
   }
-  await apiRequest('/rules/holidays', {
-    method: 'PUT',
-    body: JSON.stringify({ dates, name, is_workday: isWorkday ? 1 : 0 }),
-  });
-  await touchConfigUpdatedAt();
-  await loadHolidays();
-  newHoliday.value = { startDate: '', endDate: '', name: '', type: 'holiday' };
+  try {
+    await apiRequest('/rules/holidays', {
+      method: 'PUT',
+      body: JSON.stringify({ dates, name, is_workday: isWorkday ? 1 : 0 }),
+    });
+    try { await touchConfigUpdatedAt(); } catch (e) { /* 写入时间戳失败不影响假期列表 */ }
+    await loadHolidays();
+    newHoliday.value = { startDate: '', endDate: '', name: '', type: 'holiday' };
+    showSaved();
+  } catch (err) {
+    alert(err.message || '添加假期失败');
+  }
 }
 
 async function deleteHoliday(h) {
-  await apiRequest('/rules/holidays/' + h.id, { method: 'DELETE' });
-  await touchConfigUpdatedAt();
-  await loadHolidays();
+  try {
+    await apiRequest('/rules/holidays/' + h.id, { method: 'DELETE' });
+    await touchConfigUpdatedAt();
+    await loadHolidays();
+  } catch (err) {
+    alert(err.message || '删除假期失败');
+  }
 }
 </script>
+
+<style scoped>
+.empty-hint { padding: 16px; text-align: center; font-size: 13px; color: var(--ink-secondary); }
+</style>

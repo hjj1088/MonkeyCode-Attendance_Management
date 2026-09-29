@@ -242,6 +242,13 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             if dist_file.startswith(os.path.normpath(dist_dir)) and serve_file(dist_file, path):
                 return
 
+        # dist 根级静态文件（public/ 构建产物，如背景图）
+        dist_root_file = os.path.normpath(os.path.join(dist_dir, path.lstrip('/')))
+        if (dist_root_file.startswith(os.path.normpath(dist_dir))
+                and not os.path.basename(dist_root_file).startswith('index.')
+                and serve_file(dist_root_file, path)):
+            return
+
         # Legacy client pages
         file_path = os.path.normpath(os.path.join(client_dir, path.lstrip('/')))
         if not file_path.startswith(os.path.normpath(client_dir)):
@@ -251,9 +258,13 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             return
         if serve_file(file_path, path):
             return
-        self.send_response(302)
-        self.send_header('Location', '/index.html')
+        dist_index = os.path.join(dist_dir, 'index.html')
+        if os.path.isfile(dist_index) and '.' not in os.path.basename(path):
+            serve_file(dist_index, '/index.html')
+            return
+        self.send_response(404)
         self.end_headers()
+        self.wfile.write(b'Not Found')
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -274,9 +285,19 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             handle_users_create(self)
             return
 
+        if path == '/api/users/import-from-punch':
+            from handlers.users import handle_users_import_from_punch
+            handle_users_import_from_punch(self)
+            return
+
         if path == '/api/users/reset-password':
             from handlers.users import handle_users_reset_password
             handle_users_reset_password(self)
+            return
+
+        if path == '/api/rules/holidays':
+            from handlers.rules import handle_holidays_post
+            handle_holidays_post(self)
             return
 
         if path == '/api/attendance/import':
@@ -423,6 +444,13 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         if m:
             from handlers.rules import handle_holidays_delete
             handle_holidays_delete(self)
+            return
+
+        m = re.match(r'/api/users/(\d+)$', path)
+        if m:
+            from handlers.users import handle_users_delete
+            self.path = '/api/users/' + m.group(1)
+            handle_users_delete(self)
             return
 
         if not self._authenticate():

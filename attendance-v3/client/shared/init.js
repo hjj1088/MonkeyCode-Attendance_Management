@@ -1,4 +1,4 @@
-// shared/init.js — 兼容桥接层 V3.1 (Store API backend)
+// shared/init.js — 兼容桥接层 (Store API backend, 登录入口 V3.2 SPA)
 // DB (Dexie) is no longer used; replaced by Store REST API
 
 window.AttendanceDB = {

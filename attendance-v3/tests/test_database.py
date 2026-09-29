@@ -66,3 +66,13 @@ def test_attendance_results_schema():
         'absent', 'leaveType', 'isRestDay', 'missTime',
     }
     assert expected_columns.issubset(columns), f"Missing columns: {expected_columns - columns}"
+
+
+def test_oa_tables_have_is_self_and_subject():
+    database.init_db()
+    conn = database.get_db()
+    for table in ('leave_records', 'overtime_records', 'travel_records', 'miss_punch_records'):
+        columns = {row['name'] for row in conn.execute('PRAGMA table_info({})'.format(table)).fetchall()}
+        missing = {'isSelf', 'subject'} - columns
+        assert not missing, '{} missing {}'.format(table, missing)
+    conn.close()

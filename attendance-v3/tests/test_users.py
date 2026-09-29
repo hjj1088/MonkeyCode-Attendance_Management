@@ -109,6 +109,16 @@ def test_reset_login_attempts():
     conn.close()
 
 
+def test_delete_user():
+    conn = _conn()
+    uid = database.create_user(conn, 'delme', 'h', '待删者', '行政部', 'employee')
+    assert database.get_user_by_id(conn, uid) is not None
+    conn.execute("DELETE FROM users WHERE id = ?", (uid,))
+    conn.commit()
+    assert database.get_user_by_id(conn, uid) is None
+    conn.close()
+
+
 def test_log_operation():
     conn = _conn()
     database.log_operation(conn, 'admin', 'login', 'admin logged in')

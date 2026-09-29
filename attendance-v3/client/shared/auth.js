@@ -1,7 +1,5 @@
-// shared/auth.js V3.1
-// 认证模块 - 调用后端 JWT API
-
-const AUTH_KEY = 'attendance_auth';
+// shared/auth.js
+// 认证模块 - V3.1 旧版页面共用，登录入口统一为 V3.2 SPA /login
 
 const Auth = {
   isLoggedIn() {
@@ -31,12 +29,12 @@ const Auth = {
   logout() {
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
-    window.location.href = 'index.html';
+    window.location.href = '/login';
   },
 
   requireAuth() {
     if (!this.isLoggedIn()) {
-      window.location.href = 'index.html';
+      window.location.href = '/login';
     }
   }
 };

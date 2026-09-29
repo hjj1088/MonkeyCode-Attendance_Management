@@ -1,4 +1,4 @@
-// shared/api-store.js V3.1
+// shared/api-store.js
 // Store API - replaces IndexedDB/Dexie with REST API backend
 // Same interface as V2.0 db.js Store object
 
@@ -19,7 +19,7 @@ function _request(path, options = {}) {
     if (res.status === 401) {
       sessionStorage.removeItem('token');
       sessionStorage.removeItem('user');
-      window.location.href = 'index.html';
+      window.location.href = '/login';
       throw new Error('Unauthorized');
     }
     if (!res.ok) {

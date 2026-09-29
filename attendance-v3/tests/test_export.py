@@ -105,6 +105,39 @@ class TestExport:
         cf_count = len(ws.conditional_formatting._cf_rules)
         assert cf_count >= 2
 
+    def test_build_flat_report_time_abnormal_formatting(self):
+        from handlers.export import build_flat_report
+        import openpyxl
+
+        # 上班迟到 > 8:30
+        records_late = [
+            {'employeeNo': 'T001', 'name': '张三', 'signIn': '09:30', 'signOut': '17:30', 'status': 'normal'}
+        ]
+        template = {'fields': [
+            {'field': 'signIn', 'label': '签到'},
+            {'field': 'signOut', 'label': '签退'},
+        ]}
+
+        output = build_flat_report(records_late, template, 'test_late.xlsx', startTime='08:30', endTime='17:30')
+        wb = openpyxl.load_workbook(output)
+        ws = wb.active
+
+        # 检查是否有条件格式规则
+        cf_count = len(ws.conditional_formatting._cf_rules)
+        assert cf_count >= 1
+
+        # 检查下班早退 < 17:30
+        records_early = [
+            {'employeeNo': 'T001', 'name': '张三', 'signIn': '08:30', 'signOut': '16:30', 'status': 'normal'}
+        ]
+
+        output = build_flat_report(records_early, template, 'test_early.xlsx', startTime='08:30', endTime='17:30')
+        wb = openpyxl.load_workbook(output)
+        ws = wb.active
+
+        cf_count = len(ws.conditional_formatting._cf_rules)
+        assert cf_count >= 1
+
     def test_build_calendar_report_structure(self):
         from handlers.export import build_calendar_report
         import openpyxl
@@ -132,6 +165,107 @@ class TestExport:
         wb = openpyxl.load_workbook(output, data_only=True)
         ws = wb.active
         assert ws.cell(3, 2).value == '法定假日'
+
+    def _cf_formulas(self, ws):
+        formulas = []
+        for rules in ws.conditional_formatting._cf_rules.values():
+            for rule in rules:
+                for f in getattr(rule, 'formula', []) or []:
+                    formulas.append(str(f))
+        return formulas
+
+    def _is_red_font(self, cell):
+        color = cell.font.color if cell.font else None
+        if color is None:
+            return False
+        rgb = str(getattr(color, 'rgb', '') or '')
+        return 'FF0000' in rgb.upper()
+
+    def _cell_hhmm(self, cell):
+        val = cell.value
+        if hasattr(val, 'hour'):
+            return f'{val.hour:02d}:{val.minute:02d}'
+        return str(val) if val is not None else ''
+
+    def test_build_calendar_time_abnormal_formatting(self):
+        from handlers.export import build_calendar_report
+        import openpyxl
+
+        results = [
+            {'employeeNo': 'T001', 'name': '张三', 'department': '技术部',
+             'date': '2026-07-01', 'status': 'normal', 'signIn': '09:30', 'signOut': '16:30'}
+        ]
+        output = build_calendar_report('2026-07', [], results, [], [], startTime='08:30', endTime='17:30')
+        wb = openpyxl.load_workbook(output)
+        ws = wb.active
+
+        formulas = self._cf_formulas(ws)
+        joined = '\n'.join(formulas)
+        assert len(formulas) >= 2
+        assert 'ISNUMBER' in joined
+        assert 'MOD(ROW(),2)=1' in joined
+        assert 'MOD(ROW(),2)=0' in joined
+        assert 'TIME(8,30,0)' in joined.replace(' ', '')
+        assert 'TIME(17,30,0)' in joined.replace(' ', '')
+
+        assert self._cell_hhmm(ws.cell(3, 4)) == '09:30'
+        assert self._is_red_font(ws.cell(3, 4)), 'late sign-in must be red'
+        assert self._cell_hhmm(ws.cell(4, 4)) == '16:30'
+        assert self._is_red_font(ws.cell(4, 4)), 'early sign-out must be red'
+
+        results_ok = [
+            {'employeeNo': 'T001', 'name': '张三', 'department': '技术部',
+             'date': '2026-07-01', 'status': 'normal', 'signIn': '08:30', 'signOut': '17:30'}
+        ]
+        output_ok = build_calendar_report('2026-07', [], results_ok, [], [], startTime='08:30', endTime='17:30')
+        ws_ok = openpyxl.load_workbook(output_ok).active
+        assert not self._is_red_font(ws_ok.cell(3, 4)), 'on-time sign-in stays default'
+        assert not self._is_red_font(ws_ok.cell(4, 4)), 'on-time sign-out stays default'
+
+    def test_export_reads_work_times_from_attendance_config(self):
+        from handlers.export import build_calendar_report, build_flat_report
+        import database
+        import openpyxl
+
+        conn = database.get_db()
+        conn.execute(
+            "UPDATE settings SET value = ? WHERE key = 'attendance_config'",
+            (json.dumps({
+                'workStartTime': '09:00:00',
+                'workEndTime': '18:00',
+                'lateThreshold': 0,
+                'earlyThreshold': 0,
+            }, ensure_ascii=False),)
+        )
+        conn.commit()
+        conn.close()
+
+        results = [
+            {'employeeNo': 'T001', 'name': '张三', 'department': '技术部',
+             'date': '2026-07-01', 'status': 'normal', 'signIn': '09:00', 'signOut': '17:30'}
+        ]
+        output = build_calendar_report('2026-07', [], results, [])
+        ws = openpyxl.load_workbook(output).active
+        joined = '\n'.join(self._cf_formulas(ws)).replace(' ', '')
+        assert 'TIME(9,0,0)' in joined
+        assert 'TIME(18,0,0)' in joined
+        assert not self._is_red_font(ws.cell(3, 4)), '09:00 is on time vs config 09:00'
+        assert self._is_red_font(ws.cell(4, 4)), '17:30 is early vs config 18:00'
+
+        template = {'fields': [
+            {'field': 'signIn', 'label': '签到'},
+            {'field': 'signOut', 'label': '签退'},
+        ]}
+        flat = build_flat_report(
+            [{'employeeNo': 'T001', 'signIn': '09:30', 'signOut': '18:00'}],
+            template, 't.xlsx'
+        )
+        ws_flat = openpyxl.load_workbook(flat).active
+        flat_joined = '\n'.join(self._cf_formulas(ws_flat)).replace(' ', '')
+        assert 'TIME(9,0,0)' in flat_joined
+        assert 'TIME(18,0,0)' in flat_joined
+        assert self._is_red_font(ws_flat.cell(2, 1)), '09:30 late vs config 09:00'
+        assert not self._is_red_font(ws_flat.cell(2, 2)), '18:00 on time vs config 18:00'
 
     def test_build_calendar_groups_by_department(self):
         from handlers.export import build_calendar_report

@@ -45,7 +45,7 @@ class MockHandler:
 def make_hradmin_handler():
     from handlers.auth import generate_token
     h = MockHandler()
-    token = generate_token(1, 'admin', 'hradmin', '系统')
+    token = generate_token(1, 'admin', 'superadmin', '系统')
     h.headers = {'Authorization': 'Bearer ' + token}
     return h
 
@@ -139,16 +139,21 @@ class TestHolidays:
         assert len(h2.sent['data']) == 3
 
     def test_duplicate_date_skipped(self):
-        from handlers.rules import handle_holidays_post
+        from handlers.rules import handle_holidays_post, handle_holidays_get
         h = make_hradmin_handler()
         h._body = json.dumps({'dates': ['2026-10-01'], 'name': '国庆', 'is_workday': 0})
         handle_holidays_post(h)
         assert h.sent['data']['added'] == 1
 
         h2 = make_hradmin_handler()
-        h2._body = json.dumps({'dates': ['2026-10-01'], 'name': '国庆', 'is_workday': 0})
+        h2._body = json.dumps({'dates': ['2026-10-01'], 'name': '国庆调休', 'is_workday': 1})
         handle_holidays_post(h2)
-        assert h2.sent['data']['added'] == 0
+        assert h2.sent['data']['added'] == 1
+        h3 = make_hradmin_handler()
+        handle_holidays_get(h3)
+        assert len(h3.sent['data']) == 1
+        assert h3.sent['data'][0]['name'] == '国庆调休'
+        assert h3.sent['data'][0]['isWorkday'] == 1
 
     def test_workday_holiday(self):
         from handlers.rules import handle_holidays_post, handle_holidays_get
