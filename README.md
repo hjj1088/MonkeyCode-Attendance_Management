@@ -64,7 +64,26 @@ cd attendance-v3/client
 npm run build      # 产物在 client/dist，由 server.py 静态托管
 ```
 
-初始账号：`admin` / `admin123`（角色 hradmin，首次登录强制改密）。调用 `POST /api/system/seed-test-data` 可生成测试数据：技术部/销售部/行政部各 5 名员工 + 部门管理员（`dept_*`，角色 deptadmin），密码统一 `test123`。
+Docker 部署（容器只跑 8001；镜像自动发布到 GHCR）：
+
+```bash
+docker run -d -p 8001:8001 \
+  -e JWT_SECRET=<CHANGE_ME> \
+  -v ./attendance-data:/app/server/data \
+  --restart unless-stopped \
+  ghcr.io/hjj1088/monkeycode-attendance_management-v3:latest
+```
+
+或在 `attendance-v3/` 使用 compose 一键编排（含数据卷持久化）：
+
+```bash
+cd attendance-v3
+docker compose up -d --build
+```
+
+源码有改动必须 `--build` 重建 `client/dist`。完整部署流程（含 Gitee 无容器仓库的替代方案、数据备份、常见问题）见 [DEPLOYMENT_V3.2.md](.monkeycode/docs/DEPLOYMENT_V3.2.md)。
+
+初始账号：`admin` / `admin123`（角色 superadmin，首次登录强制改密）。调用 `POST /api/system/seed-test-data` 可生成测试数据：技术部/销售部/行政部各 5 名员工 + 部门管理员（`dept_*`，角色 deptadmin），密码统一 `test123`。
 
 ### V2.0（旧版）
 
@@ -90,8 +109,8 @@ attendance-v3/           # V3.1/V3.2 当前版本
 ├── client/
 │   ├── index.html               # SPA 入口（挂载 xlsx + main.js）
 │   ├── vite.config.js           # dev 8002、proxy /api→127.0.0.1:8001、allowedHosts
-│   ├── attendance.html          # 旧版考勤计算页（保留，V3.1 兼容入口）
-│   ├── import.html / export.html / settings.html / login.html
+│   ├── attendance.html          # 旧版考勤计算页（保留，V3.1 兼容入口，登录跳 V3.2 /login）
+│   ├── import.html / export.html / settings.html
 │   ├── dist/                    # Vite 生产构建产物
 │   └── src/
 │       ├── main.js / App.vue    # 入口 + 顶层布局
@@ -144,6 +163,7 @@ Excel 上传 -> 后端 SQLite 落库（punch 导入记录 last_punch_month）
 - [ARCHITECTURE.md](.monkeycode/docs/ARCHITECTURE.md) — 系统架构（含 V1.0 → V3.2 演进）
 - [INTERFACES.md](.monkeycode/docs/INTERFACES.md) — 接口/数据库 Schema
 - [DEVELOPER_GUIDE.md](.monkeycode/docs/DEVELOPER_GUIDE.md) — 开发者指南
+- [DEPLOYMENT_V3.2.md](.monkeycode/docs/DEPLOYMENT_V3.2.md) — V3.2 部署指南（Docker 镜像 + 源码）
 - [专有概念/V3.2-多角色与审核工作流.md](.monkeycode/docs/专有概念/V3.2-多角色与审核工作流.md) — 多角色权限与审核状态机
 
 ## License

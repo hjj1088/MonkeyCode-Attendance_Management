@@ -1,0 +1,31 @@
+# 构建上下文排除：本地产物、缓存与源码无关内容
+# 前端（Stage 1 会重新 npm ci + build，无需携带本地产物）
+client/node_modules
+client/dist
+client/.vite
+client/.vscode
+client/*.log
+client/preview-ui-check.html
+
+# 后端缓存与运行数据
+server/__pycache__
+server/**/__pycache__
+server/.pytest_cache
+server/data
+server/*.pyc
+__pycache__
+*.pyc
+
+# 宿主机 compose 数据卷
+data
+
+# 测试与工具
+tests
+.pytest_cache
+*.log
+.monkeycode
+
+# Git 与编辑器
+.git
+.gitignore
+.env
