@@ -81,3 +81,4 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 国内构建：`NPM_REGISTRY=https://registry.npmmirror.com PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple docker compose up -d --build`
   - 生产 JWT 在 compose `environment` 写 `JWT_SECRET`；当前 compose 未注入该变量
   - `docker pull ghcr.io/hjj1088/monkeycode-attendance_management-v3:latest` 报 `denied`：GHCR 包默认 Private；改 Package visibility 为 Public，或 `docker login ghcr.io` 后 pull；否则本地 `docker compose up -d --build`
+  - 开发沙箱无 docker daemon，`docker compose` 不可执行；本地生产形态验证：`client npm run build` 后 server.py 挂载 dist（StaticFiles 每请求读磁盘，前端改动构建后无需重启 8001 进程），镜像构建 Stage 1 内置 `npm run build`，服务器只需 pull 源码后 compose build
