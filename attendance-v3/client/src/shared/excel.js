@@ -216,7 +216,7 @@ export const Excel = {
     const typeRules = [
       { type: 'punch', required: ['考勤号码', '签到时间'], bonus: ['签退时间', '迟到时间', '部门', '日期', '上班时间', '下班时间'] },
       { type: 'leave', required: ['请假类型', '开始日期'], bonus: ['结束日期', '请假天数', '申请人', '申请部门', '是否本人', '请假人员'] },
-      { type: 'overtime', required: ['加班起止时间'], bonus: ['申请人', '申请部门', '加班内容', '是否本人', '加班人员'] },
+      { type: 'overtime', required: ['加班起止时间'], requiredAlt: ['开始时间', '结束时间'], bonus: ['申请人', '申请部门', '加班内容', '是否本人', '加班人员', '小时'] },
       { type: 'travel', required: ['出差起止日期'], bonus: ['申请人', '目的地', '出差事由', '出差人员', '是否本人'] },
       { type: 'miss_punch', required: ['忘打卡日期'], bonus: ['申请人', '忘打卡人员', '未打卡时间', '事由', '是否本人'] }
     ];
@@ -224,7 +224,8 @@ export const Excel = {
     let bestType = 'unknown';
     let bestScore = 0;
     for (const rule of typeRules) {
-      const requiredMatch = rule.required.every(r => headers.includes(r));
+      const requiredMatch = rule.required.every(r => headers.includes(r))
+        || (rule.requiredAlt ? rule.requiredAlt.every(r => headers.includes(r)) : false);
       if (!requiredMatch) continue;
       const bonusMatch = rule.bonus.filter(b => headers.includes(b)).length;
       const score = rule.required.length + bonusMatch;
@@ -322,11 +323,15 @@ export const Excel = {
         const otHours = clean['小时'] || '';
         const otApplicant = clean['申请人'] || '';
         const otIsSelf = String(clean['是否本人'] || '').trim();
+        const hasRange = String(otRange).trim() !== '';
+        const otStart = hasRange
+          ? (typeof otRange === 'number' ? (otRange > 1 ? await this._formatDate(otRange) : this._formatTime(otRange)) : String(otRange).trim())
+          : await this._formatDateTime(clean['开始时间']);
         return {
           applicant: otApplicant,
           department: clean['申请部门'] || '',
-          startTime: typeof otRange === 'number' ? (otRange > 1 ? await this._formatDate(otRange) : this._formatTime(otRange)) : String(otRange).trim(),
-          endTime: '',
+          startTime: otStart,
+          endTime: hasRange ? '' : await this._formatDateTime(clean['结束时间']),
           overtimeHours: parseFloat(otHours) || 0,
           content: clean['加班内容'] || '',
           isSelf: otIsSelf,
@@ -406,6 +411,31 @@ export const Excel = {
     const match = str.match(/(\d{1,2}):(\d{2})/);
     if (match) {
       return `${match[1].padStart(2, '0')}:${match[2]}`;
+    }
+    return str;
+  },
+
+  async _formatDateTime(val) {
+    if (!val && val !== 0) return '';
+    if (typeof val === 'number') {
+      const XLSX = await withXLSX();
+      const date = XLSX.SSF.parse_date_code(val);
+      if (date) {
+        const base = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+        if (date.H || date.M) {
+          return `${base} ${String(date.H).padStart(2, '0')}:${String(date.M).padStart(2, '0')}`;
+        }
+        return base;
+      }
+    }
+    const str = String(val).trim();
+    const match = str.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})(?:[ T]+(\d{1,2}):(\d{1,2}))?/);
+    if (match) {
+      const date = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+      if (match[4] != null) {
+        return `${date} ${match[4].padStart(2, '0')}:${match[5]}`;
+      }
+      return date;
     }
     return str;
   },
