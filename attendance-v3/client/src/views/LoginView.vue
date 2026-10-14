@@ -22,7 +22,7 @@
       <button class="btn btn-primary" style="width:100%;justify-content:center;" :disabled="loading" @click="handleLogin">
         <AppIcon name="log-in" /><span>{{ loading ? '登录中...' : '登录' }}</span>
       </button>
-      <div class="login-version" style="text-align:center;margin-top:16px;font-size:12px;color:var(--ink-muted);">V3.2 考勤管理系统</div>
+      <div class="login-version" style="text-align:center;margin-top:16px;font-size:12px;color:var(--ink-muted);">{{ versionLabel }}</div>
     </div>
   </div>
 </template>
@@ -32,6 +32,7 @@ import { ref, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
 import Auth from '../shared/auth';
+import { apiRequest } from '../shared/api';
 
 const router = useRouter();
 const username = ref('');
@@ -40,10 +41,17 @@ const error = ref('');
 const loading = ref(false);
 const usernameInput = ref(null);
 const passwordInput = ref(null);
+const versionLabel = ref('V3.3 考勤管理系统');
 
 onMounted(async () => {
   await nextTick();
   if (usernameInput.value) usernameInput.value.focus();
+  try {
+    const v = await apiRequest('/system/version');
+    if (v && (v.version_name || v.app_version)) {
+      versionLabel.value = (v.version_name || ('V' + v.app_version)) + ' 考勤管理系统';
+    }
+  } catch (e) { /* 保持默认 */ }
 });
 
 async function handleLogin() {

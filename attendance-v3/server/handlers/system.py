@@ -8,7 +8,7 @@ from database import get_db
 from middleware import verify_token
 
 SERVER_START_TIME = None
-APP_VERSION = '3.2.0'
+APP_VERSION = '3.3.0'
 
 
 def set_start_time():
@@ -28,7 +28,7 @@ def _get_admin_user(conn):
 def handle_system_version(handler):
     handler._send_json(0, data={
         'app_version': APP_VERSION,
-        'version_name': 'V3.2',
+        'version_name': 'V3.3',
     })
 
 

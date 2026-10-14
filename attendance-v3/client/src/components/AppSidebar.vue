@@ -4,7 +4,7 @@
       <div class="sidebar-logo" aria-hidden="true">勤</div>
       <div class="sidebar-brand-wrap">
         <div class="sidebar-brand">考勤系统</div>
-        <div class="sidebar-sub">Attendance V3.2</div>
+        <div class="sidebar-sub">Attendance V3.3</div>
       </div>
     </div>
     <nav id="sidebar-nav">
@@ -41,7 +41,7 @@ defineEmits(['navigate']);
 
 const route = useRoute();
 const router = useRouter();
-const versionText = ref('V3.2.0');
+const versionText = ref('V3.3.0');
 
 onMounted(async () => {
   try {

@@ -1,6 +1,8 @@
-# V3.2 部署指南
+# V3.2 / V3.3 部署指南
 
-本指南覆盖 V3.2（`attendance-v3/`，Vite + Vue 3 SPA + SQLite 后端）的完整部署流程，包括 Docker 镜像部署（推荐）与源码部署两种方式。
+本指南覆盖 `attendance-v3/`（Vite + Vue 3 SPA + SQLite 后端）V3.2 与 V3.3 的完整部署流程，包括 Docker 镜像部署（推荐）与源码部署两种方式。
+
+> V3.3（`APP_VERSION = '3.3.0'`，`version_name = 'V3.3'`）沿用 V3.2 完全相同的 Dockerfile / docker-compose.yml / 端口 / 数据卷约定，仅应用代码与版本号变化。推送 `main` 触发 GHCR `:latest`；推送 git tag `v3.3` 触发镜像 tag `3.3`。
 
 ## 部署方式总览
 
@@ -36,7 +38,7 @@ docker pull ghcr.io/hjj1088/monkeycode-attendance_management-v3:latest
 | Tag | 内容 |
 |-----|------|
 | `latest` | 最新稳定版（默认分支构建） |
-| `v3.2.0` 等 | 与 git tag 对应的版本 |
+| `3.3` / `3.2` 等 | 与 git tag（`v3.3` / `v3.2`）对应的 semver 版本 |
 | `main` | 默认分支最新提交 |
 | `<sha>` | 具体提交构建 |
 
@@ -256,4 +258,4 @@ PAT 需 `read:packages`。无权限或不想登录时，在源码目录本地构
 | `attendance-v3/Dockerfile` | 多阶段 Dockerfile（Node 20 构建前端 → Python 3.12 运行时 + HEALTHCHECK） |
 | `attendance-v3/docker-compose.yml` | 一键编排（数据卷、`HOST_PORT`、构建参数） |
 | `attendance-v3/.dockerignore` | 构建上下文精简（排除 dist、data、tests、预览页） |
-| `.github/workflows/docker-publish.yml` | GitHub Actions：自动构建并推送 V2.0 / V3.2 镜像到 GHCR |
+| `.github/workflows/docker-publish.yml` | GitHub Actions：自动构建并推送 V2.0 / V3.x 镜像到 GHCR |

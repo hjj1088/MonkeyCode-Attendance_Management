@@ -38,6 +38,8 @@ Docker daemon 重启后若 curl 超时（TCP 握手成功但 HTTP 无响应）�
 
 ## 项目结构约定
 
+当前代码在 `attendance-v3/`（V3.2 SPA + V3.3 `fieldMap.js`）。下面条目描述 V2.0 `attendanceapp/` 约定；V3.2/V3.3 约定见文末。
+
 - **shared/ 目录**：所有 HTML 页面共享的业务逻辑模块和本地化第三方库
 - **bigsur.css**：全局设计系统（472行），定义 CSS 变量、组件类和响应式规则，所有页面通过 `<link>` 引入
 - **layout.js**：侧边栏导航框架，各页面通过 `<script>` 加载后自动初始化
@@ -47,11 +49,15 @@ Docker daemon 重启后若 curl 超时（TCP 握手成功但 HTTP 无响应）�
 
 ## 新增数据导入类型
 
-1. 在 `excel.js` 的 `identifyFileType()` 中添加新的 `typeRules` 条目
-2. 在 `excel.js` 的 `_normalizeRecord()` 中添加字段映射
-3. 在 `db.js` 的 `DB.version(1).stores()` 中添加新表
-4. 在 `import.html` 的 `importAll()` 中添加入库逻辑
-5. 在 `import.html` 的 `typeLabel()` 和 `typeClass()` 中添加标签/样式
+V3.3 起识别与取值配置集中在 `fieldMap.js`，5 类 Excel 共用一套 `pickField`，不写独立解析器：
+
+1. 在 `fieldMap.js` 的 `DEFAULT_OA_FIELD_MAP.types` 添加类型与字段别名
+2. 在 `fieldMap.js` 的 `TYPE_IDENTIFY` 添加必含/加分字段（必含字段名用内部字段名，经别名匹配）
+3. 在 `fieldMap.js` 的 `RECORD_SCHEMA` 添加字段类型（`str/date/time/num/bool`）与输出 `order`；OA 类型加 `oa: true` 与 `after` 后处理
+4. 在 `FIELD_LABELS` 补中文标签（预览与设置页共用）
+5. 后端建表改 `server/database.py`（V3.2）；在导入页补类型徽标
+
+> `excel.js` 的 `identifyFileType()` / `_normalizeRecord()` 按上述配置循环，无需改动。
 
 ## 修改考勤规则
 
@@ -198,7 +204,7 @@ python3 /workspace/attendance-v3/server/server.py
 
 # V3.2 开发指南（Vite SPA + 多角色）
 
-> 当前开发以 `attendance-v3/` 的 Vite + Vue 3 SPA 为准。完整部署见 [DEPLOYMENT_V3.2.md](./DEPLOYMENT_V3.2.md)。
+> 当前开发以 `attendance-v3/` 的 Vite + Vue 3 SPA 为准（应用版本 **V3.3**）。完整部署见 [DEPLOYMENT_V3.2.md](./DEPLOYMENT_V3.2.md)。
 
 ## 环境搭建（V3.2）
 
@@ -226,6 +232,8 @@ npm run dev
 - 认证：`src/shared/auth.js`，token + user 在 `sessionStorage`。
 - Vite：`vite.config.js` `appType: 'spa'` + `spaHtmlFallback()`。刷新 `/attendance` 必须回 `index.html`，否则命中旧 `client/attendance.html`。
 - 计算：`src/shared/rules.js`，`RULES_VERSION = '1.0.28'`。后端只存结果。
+- 导入别名（V3.3）：`src/shared/fieldMap.js`。改默认表头在 `DEFAULT_OA_FIELD_MAP`；设置页保存或 `learnMany` 后清 `Excel._fieldMapCache`。两列同名「申请人」：本人取第 1 列，其它取第 2 列。导入预览表头走 `labelForField`。
+- 应用版本：改 `handlers/system.py` 的 `APP_VERSION` / `version_name`。登录页、侧栏、系统设置读 `GET /api/system/version`。
 - 排班：`parseScheduleSheet` 必须 `await sheetToArray`。界面按天计数（`flattenScheduleDays`），入库仍按月对象。
 - 空结果：`configChanged` 仅有计算结果时亮；有打卡未计算只留「尚未计算」。
 - 分页：考勤页、用户管理页固定 7 槽、按钮等宽、`N / M` 等宽数字。

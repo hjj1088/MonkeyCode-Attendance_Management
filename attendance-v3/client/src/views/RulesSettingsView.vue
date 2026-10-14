@@ -6,6 +6,7 @@
       <div class="tab" :class="{ active: tab === 'time' }" @click="tab = 'time'">考勤时段</div>
       <div class="tab" :class="{ active: tab === 'tolerance' }" @click="tab = 'tolerance'">容错规则</div>
       <div class="tab" :class="{ active: tab === 'holidays' }" @click="tab = 'holidays'">假期管理</div>
+      <div class="tab" :class="{ active: tab === 'fields' }" @click="tab = 'fields'">OA 字段</div>
     </div>
 
     <div v-if="tab === 'time'" class="card">
@@ -50,6 +51,31 @@
       </div>
     </div>
 
+    <div v-else-if="tab === 'fields'" class="card">
+      <div class="card-header">
+        <h2 class="card-title">OA 字段映射</h2>
+        <button @click="saveFieldMap" class="btn btn-primary"><AppIcon name="save" /><span>保存映射</span></button>
+      </div>
+      <p class="hint-text">OA 表头改名后，在此补别名或等下次导入时自动学到相近列名。逗号分隔多个别名。</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="form-group">
+          <label class="form-label">视为本人</label>
+          <input v-model="selfTrueText" type="text" class="form-input" placeholder="本人,是,Y">
+        </div>
+        <div class="form-group">
+          <label class="form-label">视为帮他人</label>
+          <input v-model="selfFalseText" type="text" class="form-input" placeholder="非本人,否,帮他人">
+        </div>
+      </div>
+      <div class="tabs mb-md" style="margin-bottom:12px">
+        <div v-for="t in fieldTypes" :key="t.key" class="tab" :class="{ active: fieldType === t.key }" @click="fieldType = t.key">{{ t.label }}</div>
+      </div>
+      <div v-for="row in currentFieldRows" :key="row.field" class="form-group">
+        <label class="form-label">{{ row.label }}</label>
+        <input v-model="fieldDraft[fieldType][row.field]" type="text" class="form-input" :placeholder="row.placeholder">
+      </div>
+    </div>
+
     <div v-else class="card">
       <h2 class="card-title mb-md">假期管理</h2>
       <div class="flex flex-wrap gap-sm mb-md" style="align-items:flex-end">
@@ -86,20 +112,44 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import { apiRequest } from '../shared/api';
 import Store from '../shared/store';
+import { FieldMap, mergeFieldMap, FIELD_LABELS } from '../shared/fieldMap';
+import Excel from '../shared/excel';
 
 const tab = ref('time');
 const saved = ref(false);
 const config = ref({ workStartTime: '08:30', workEndTime: '17:30', lateThreshold: 0, earlyThreshold: 0, graceTimes: 2, graceMinutes: 30 });
 const holidays = ref([]);
 const newHoliday = ref({ startDate: '', endDate: '', name: '', type: 'holiday' });
+const fieldType = ref('leave');
+const selfTrueText = ref('');
+const selfFalseText = ref('');
+const fieldDraft = ref({ punch: {}, leave: {}, miss_punch: {}, overtime: {}, travel: {} });
+const fieldTypes = [
+  { key: 'leave', label: '请假' },
+  { key: 'miss_punch', label: '漏打卡' },
+  { key: 'overtime', label: '加班' },
+  { key: 'travel', label: '出差' },
+  { key: 'punch', label: '打卡' },
+];
+const currentFieldRows = computed(() => {
+  const labels = FIELD_LABELS[fieldType.value] || {};
+  const draft = fieldDraft.value[fieldType.value] || {};
+  return Object.keys(labels).map((field) => ({
+    field,
+    label: labels[field],
+    aliases: draft[field] || '',
+    placeholder: labels[field],
+  }));
+});
 
 onMounted(async () => {
   await loadConfig();
   await loadHolidays();
+  await loadFieldMap();
 });
 
 async function loadConfig() {
@@ -119,6 +169,51 @@ async function loadHolidays() {
   } catch (e) {
     holidays.value = [];
   }
+}
+
+function splitAliases(text) {
+  return String(text || '').split(/[,，、;；]/).map(s => s.replace(/\s+/g, '').trim()).filter(Boolean);
+}
+
+function applyFieldMap(map) {
+  const merged = mergeFieldMap(map);
+  selfTrueText.value = (merged.selfTrueValues || []).join(',');
+  selfFalseText.value = (merged.selfFalseValues || []).join(',');
+  const draft = {};
+  for (const type of Object.keys(FIELD_LABELS)) {
+    draft[type] = {};
+    const src = (merged.types && merged.types[type]) || {};
+    for (const field of Object.keys(FIELD_LABELS[type])) {
+      draft[type][field] = (src[field] || []).join(',');
+    }
+  }
+  fieldDraft.value = draft;
+}
+
+async function loadFieldMap() {
+  try {
+    applyFieldMap(await FieldMap.getMap());
+  } catch (e) {
+    applyFieldMap(null);
+  }
+}
+
+async function saveFieldMap() {
+  const types = {};
+  for (const type of Object.keys(FIELD_LABELS)) {
+    types[type] = {};
+    const rows = fieldDraft.value[type] || {};
+    for (const field of Object.keys(FIELD_LABELS[type])) {
+      types[type][field] = splitAliases(rows[field]);
+    }
+  }
+  await FieldMap.saveMap({
+    selfTrueValues: splitAliases(selfTrueText.value),
+    selfFalseValues: splitAliases(selfFalseText.value),
+    types,
+  });
+  Excel._fieldMapCache = null;
+  showSaved();
 }
 
 function showSaved() {
@@ -216,4 +311,5 @@ async function deleteHoliday(h) {
 
 <style scoped>
 .empty-hint { padding: 16px; text-align: center; font-size: 13px; color: var(--ink-secondary); }
+.hint-text { font-size: 13px; color: var(--ink-secondary); margin-bottom: 12px; }
 </style>

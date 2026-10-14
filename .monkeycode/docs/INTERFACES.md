@@ -53,6 +53,8 @@
 | leaveDays | 请假天数 |
 | leaveHours | 请假小时数 |
 | reason | 请假事由 |
+| isSelf | V3.3：是否本人原始值 |
+| subject | V3.3：实际作用员工姓名（代申请落到请假人员） |
 
 #### overtime_records - 加班记录
 ```js
@@ -65,6 +67,7 @@
 | endTime | 结束时间 |
 | overtimeHours | 加班小时数 |
 | content | 加班内容 |
+| isSelf / subject | V3.3：同请假，代申请落到加班人员 |
 
 > **v2.0.2 修复**：`startTime` 原为空字符串导致 `calculateMonth` 无法按日期匹配加班 OA。现已改为解析 `加班起止时间` Excel 字段，支持数值和文本两种格式。
 
@@ -79,6 +82,7 @@
 | endDate | 结束日期 |
 | destination | 目的地 |
 | reason | 出差事由 |
+| isSelf / subject | V3.3：代申请落到出差人员 |
 
 #### miss_punch_records - 漏打卡记录
 ```js
@@ -92,6 +96,7 @@
 | missTime | 未打卡时间 |
 | cardTime | 当天刷卡时间 |
 | reason | 事由 |
+| isSelf / subject | V3.3：代申请落到忘打卡人员（与 missPerson 同源） |
 
 #### schedules - 排班表 (按员工展开)
 ```js
@@ -198,17 +203,19 @@
 
 ## 文件类型识别规则
 
-`Excel.identifyFileType()` 通过表头关键词匹配识别以下类型：
+`Excel.identifyFileType()` 通过表头关键词匹配识别以下类型。V3.3 起必含/加分为 Field Map 别名（下表为默认精确表头）：
 
 | 类型 | 必含表头 | 加分表头 |
 |------|----------|----------|
 | punch (打卡) | 考勤号码, 签到时间 | 签退时间, 迟到时间, 部门, 日期 |
-| leave (请假) | 请假类型, 开始日期 | 结束日期, 请假天数, 申请人 |
-| overtime (加班) | 加班起止时间 | 申请人, 加班内容 |
-| travel (出差) | 出差起止日期 | 申请人, 目的地, 出差事由 |
-| miss_punch (漏打卡) | 忘打卡日期 | 申请人, 未打卡时间, 事由 |
+| leave (请假) | 请假类型, 开始日期 | 结束日期, 请假天数, 申请人, 是否本人, 请假人员 |
+| overtime (加班) | 加班起止时间 | 申请人, 加班内容, 是否本人, 加班人员 |
+| travel (出差) | 出差起止日期 | 申请人, 目的地, 出差事由, 出差人员, 是否本人 |
+| miss_punch (漏打卡) | 忘打卡日期 | 申请人, 忘打卡人员, 未打卡时间, 事由, 是否本人 |
 
 排班文件通过 Sheet 名称识别：匹配 `^\\d{1,2}月$` 的 Sheet 名。
+
+V3.3 Field Map：`Store.getByKey('settings', 'oa_field_map')`。API：`pickField` / `headerExists` / `resolveSubject`（`client/src/shared/fieldMap.js`）。
 
 ## 认证 API
 
@@ -225,7 +232,7 @@ Auth.requireAuth()       // 页面守卫 (未登录跳转)
 Matcher.buildEmployeeMap()           // 从打卡记录构建 { 考勤号 -> {name, dept} }
 Matcher.syncEmployees()              // 同步到 employees 表
 Matcher.resolveEmployeeNo(name, dept) // 姓名+部门 -> 考勤号
-Matcher.matchOAToPunch(records, type) // OA 记录 -> 考勤号匹配
+Matcher.matchOAToPunch(records, type) // OA 记录 -> 考勤号匹配（V3.3：subject 优先，同名唯一回退）
 ```
 
 ## AppLayout API (v2.0 新增)
@@ -340,7 +347,7 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 ## 通用约定（V3.2）
 
 - **端口**：后端 `http://127.0.0.1:8001`；前端 Vite dev `http://127.0.0.1:8002`（`/api` 代理到 8001）
-- **认证**：除 `/api/auth/login`、`/api/auth/login-check`、`/api/system/version` 外，一律 `Authorization: Bearer <token>`（PyJWT，HS256，24h）
+- **认证**：除 `/api/auth/login`、`/api/auth/login-check`、`/api/system/version` 外，一律 `Authorization: Bearer <token>`（PyJWT，HS256，24h）。`version` 供登录页展示，无需 token
 - **登录响应**：`{code:0, data:{token, user:{id,username,name,department,role}, need_change_password}}`
 - **默认账号**：`admin` / `admin123`（bcrypt），密码仍为默认值时登录返回 `need_change_password: true`，前端引导强制改密
 - **登录锁定**：连续 5 次密码错误锁定 24 小时（`users.login_attempts` / `locked_until` = now+1 天）。距 `last_failed_login` 超过 1 天，`clear_stale_attempts` 清零计数。锁定过期由 `clear_locked_if_expired` 清除。
@@ -395,7 +402,8 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 
 | 端点 | 方法 | 请求体 | 角色 |
 |------|------|--------|------|
-| `/api/system/version` `/config` | GET | — | 登录 |
+| `/api/system/version` | GET | — | 公开。`{app_version:'3.3.0', version_name:'V3.3'}` |
+| `/api/system/config` | GET | — | 登录 |
 | `/api/system/status` | GET | —（含各表行数） | superadmin |
 | `/api/system/admin-password` | PUT | `{current_password, new_password}` | superadmin |
 | `/api/system/check-default-password` | GET | — | superadmin |
@@ -476,3 +484,11 @@ Vite：`appType: 'spa'` + `spaHtmlFallback()`，SPA 前缀无扩展名请求改�
 
 - `parseScheduleSheet`：`await this.sheetToArray(ws)`，漏 await 则解析 0 条。
 - `flattenScheduleDays(monthRecords)`：把「月 × 员工」的 `workDays` 展开为按天行（`date`/`work`）。导入页条数与预览用天数；`POST /api/attendance/import` 的 `records` 仍传月对象。
+
+## V3.3 Field Map 与 OA 列
+
+- 设置键 `oa_field_map`：`{selfTrueValues, selfFalseValues, types}`，经 `Store.getByKey/put('settings', ...)`
+- API：`pickField` / `headerExists` / `isSelfValue` / `resolveSubject` / `FieldMap.getMap|saveMap|learnMany`（`client/src/shared/fieldMap.js`）
+- 匹配得分：精确 100 / compact 80 / 前后缀 60 / compact 前后缀 40；识别阈值 40；学习阈值 60
+- OA 四表 SQLite 列 `isSelf`、`subject`（`TEXT NOT NULL DEFAULT ''`）；旧库 `_migrate` ALTER
+- UI：登录页、侧栏、系统设置版本号读 `/api/system/version`；规则设置「OA 字段」Tab 编辑别名

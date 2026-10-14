@@ -1,4 +1,4 @@
-# MonkeyCode 考勤管理系统 V3.2 - Docker 镜像
+# MonkeyCode 考勤管理系统 V3.3 - Docker 镜像
 # 多阶段构建：Stage 1 用 Node 构建 Vite 前端，Stage 2 用 Python 运行后端并托管前端产物
 # 镜像端口：8001（与 server.py PORT 一致），数据目录 /app/server/data（建议挂载 volume）
 

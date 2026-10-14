@@ -31,8 +31,8 @@ Excel 文件的全生命周期处理：解析上传、类型识别、数据标�
 
 | 方法 | 说明 |
 |------|------|
-| `identifyFileType(wb)` | 自动识别文件类型 |
-| `parseRecords(wb, fileType)` | 按类型解析全部记录 |
+| `identifyFileType(wb)` | 自动识别文件类型。V3.3：`TYPE_IDENTIFY` + Field Map 别名 + `headerExists`，5 类同一套打分 |
+| `parseRecords(wb, fileType)` | 按类型解析全部记录。V3.3：`sheetToArray` + `uniquifyHeaders`；`_normalizeRecord` 按 `RECORD_SCHEMA` 循环 `pick`；OA 四类共用 `_pickPeople` |
 
 ### 导出相关
 
@@ -47,6 +47,8 @@ Excel 文件的全生命周期处理：解析上传、类型识别、数据标�
 | `exportCalendarReport(targetMonth, fields)` | `async` | 日历月报导出。同上取作息后 POST `/api/export/calendar` |
 
 V3.2 实现位于 `attendance-v3/client/src/shared/excel.js`。`getByKey` 返回 `{key, value}`，必须解包 `.value`；直接读 `config.workStartTime` 得到空串，后端会落到默认 08:30。
+
+V3.3 字段映射位于 `client/src/shared/fieldMap.js`（`OA_FIELD_MAP_KEY = 'oa_field_map'`）。`Excel._getFieldMap()` 缓存映射；设置页保存或 `learnMany` 后必须把 `_fieldMapCache` 置 `null`。重复「申请人」列：`uniquifyHeaders` 后 `_pickPeople` 按列序分流，本人取第 1 列，其它取第 2 列。导入预览表头走 `labelForField`。
 
 ## 条件格式规则
 
@@ -150,3 +152,10 @@ v2.0.2 修复了 `overtime` 类型记录的 `startTime` 字段长期为空导致
 - **原问题**：`_normalizeRecord` 中 `case 'overtime'` 始终设置 `startTime: ''`，导致 `calculateMonth` 的 `(o.startTime || '').substring(0, 10)` 无法提取日期匹配
 - **修复**：解析 `加班起止时间` 字段的原始值存入 `startTime`：Excel 数值（>1）通过 `_formatDate` 转 `YYYY-MM-DD`；字符串原样保留
 - **影响**：加班 OA 记录现在可正确匹配到对应日期的考勤结果，详情弹窗中的加班追溯恢复正常
+
+## V3.3 字段映射接入
+
+- `identifyFileType` / `_normalizeRecord` 不再写死 `clean['请假类型']` 这类精确键
+- OA 四类写出 `isSelf` + `subject`（`resolveSubject`）
+- 模糊命中 score >= 60 时 `FieldMap.learnMany`；学习失败不影响导入
+- 排班不读 Field Map

@@ -1,16 +1,17 @@
 # MonkeyCode 考勤管理系统
 
-前后端分离的企业考勤数据处理工具，支持 Excel 导入、自动规则计算、查询浏览、带样式 XLSX 导出。系统历经 4 个版本演进：V1.0 → V2.0 → V3.1 → V3.2，当前最新为 **V3.2**（Vite + Vue 3 SPA，多角色 + 审核工作流）。
+前后端分离的企业考勤数据处理工具，支持 Excel 导入、自动规则计算、查询浏览、带样式 XLSX 导出。系统历经 5 个版本演进：V1.0 → V2.0 → V3.1 → V3.2 → V3.3，当前最新为 **V3.3**（导入灵活性：OA 字段映射；基线为 V3.2 多角色 SPA）。
 
 ## 功能
 
-- **Excel 导入**：拖拽上传打卡记录、请假/出差/加班 OA、排班表，自动识别文件类型并标准化字段
+- **Excel 导入**：拖拽上传打卡记录、请假/出差/加班 OA、排班表，自动识别文件类型并标准化字段；V3.3 支持表头别名、模糊匹配、代申请主体、导入自动学习
 - **规则引擎**：9 种考勤状态判定（正常/迟到/早退/请假/出差/加班/疑似加班/缺勤/未打卡），支持容错豁免、加班结余计算、实际工作时长
 - **考勤查询**：列表/日历双视图，部门/状态/姓名多维度筛选，详情弹窗追溯打卡与 OA 数据
 - **导出中心**：平铺列表 + 日历月报两种格式，19 种可选字段模板，迟到/早退条件格式自动标红
 - **系统设置**：考勤规则配置、容错规则、假期管理、数据库重置/导出
 - **多角色（V3.2）**：hradmin / deptadmin / employee 三级权限，部门数据隔离
 - **审核工作流（V3.2）**：pending_review → confirmed/disputed → submitted → locked 状态流转，操作审计
+- **导入灵活性（V3.3）**：`oa_field_map` 可配置别名；规则设置「OA 字段」Tab；代申请按 `subject` 匹配考勤号
 
 ## 版本说明
 
@@ -20,6 +21,7 @@
 | **V2.0** | `attendanceapp/` | 纯前端 + Python 导出服务 | IndexedDB（Dexie） | Vue 3 + bigsur.css 设计系统 | localStorage 布尔标志 | 8000 |
 | **V3.1** | `attendance-v3/` | 前后端分离（数据层迁移） | SQLite（`server/data/attendance.db`） | 沿用 V2.0 HTML 页面，数据层换 `api-store.js` | sessionStorage + JWT | 8001 |
 | **V3.2** | `attendance-v3/` | 前后端分离 + 多角色 SPA | SQLite（15 张表，含 users/operation_logs） | Vite + Vue 3 SPA（`client/src`） | PyJWT（middleware） | dev 8002 → proxy 8001 |
+| **V3.3** | `attendance-v3/` | 同 V3.2 + OA 字段映射 | 同 V3.2，`settings.oa_field_map` | 同 V3.2 + `fieldMap.js` | 同 V3.2 | 同 V3.2 |
 
 ### 各版本定位
 
@@ -27,6 +29,7 @@
 - **V2.0**：macOS Big Sur 风格重设计（`bigsur.css` 设计系统），新增侧边栏导航、Docker 容器化 + GitHub Actions CI/CD
 - **V3.1**：数据层从浏览器 IndexedDB 迁移到服务端 SQLite + REST API，解决数据持久化问题（换浏览器不丢数据），前端业务代码零改动
 - **V3.2**：前端重建为 Vite + Vue 3 SPA，新增多角色权限模型与审核工作流，后端 7 个 handler 全量挂载，104 项测试全通过
+- **V3.3**：导入表头可配置别名与模糊匹配；代申请落到实际员工；分支 `261008-feat-oa-field-map`
 
 ## 技术栈
 
@@ -105,7 +108,7 @@ docker run -d -p 8000:8000 ghcr.io/hjj1088/monkeycode-attendance_management:late
 ```
 attendance/              # V1.0 原始稳定版（纯前端 + Dexie）
 attendanceapp/           # V2.0 Big Sur 重设计（含 Dockerfile、CI）
-attendance-v3/           # V3.1/V3.2 当前版本
+attendance-v3/           # V3.1 / V3.2 / V3.3 当前版本（V3.3 = OA 字段映射）
 ├── client/
 │   ├── index.html               # SPA 入口（挂载 xlsx + main.js）
 │   ├── vite.config.js           # dev 8002、proxy /api→127.0.0.1:8001、allowedHosts
@@ -116,17 +119,17 @@ attendance-v3/           # V3.1/V3.2 当前版本
 │       ├── main.js / App.vue    # 入口 + 顶层布局
 │       ├── router/index.js      # 路由表 + 登录/角色守卫
 │       ├── assets/bigsur.css    # 设计系统样式
-│       ├── shared/              # api.js / store.js / auth.js / rules.js / excel.js / matcher.js
+│       ├── shared/              # api.js / store.js / auth.js / rules.js / excel.js / matcher.js / fieldMap.js（V3.3）
 │       ├── components/          # AppSidebar / AttendanceTable / AttendanceCalendar
-│       └── views/               # Login / SetupWizard / Settings / RulesSettings /
+│       └── views/               # Login / SetupWizard / Settings / RulesSettings（含 OA 字段 Tab）/
 │                                #   UserManage / Import / Attendance / MyAttendance / Export
 ├── server/
 │   ├── server.py                # 路由 + store CRUD + 静态托管（端口 8001）
 │   ├── middleware.py            # PyJWT 生成/校验（generate_token / verify_token）
-│   ├── database.py              # 15 表 DDL + V3.1 库升级迁移 + init_system
-│   ├── handlers/                # auth / users / system / rules / attendance / export / migrate
+│   ├── database.py              # 15 表 DDL + V3.1 库升级迁移 + init_system；OA 四表 isSelf/subject
+│   ├── handlers/                # auth / users / system（APP_VERSION 3.3.0）/ rules / attendance / export / migrate
 │   └── data/attendance.db       # SQLite 数据文件（运行时生成）
-└── tests/                       # 104 项测试（pytest + Node 驱动前端 rules）
+└── tests/                       # pytest + Node 驱动前端 rules；V3.3 含 field_map
 ```
 
 ## 数据流
@@ -160,11 +163,12 @@ Excel 上传 -> 后端 SQLite 落库（punch 导入记录 last_punch_month）
 
 完整技术文档：`.monkeycode/docs/`
 
-- [ARCHITECTURE.md](.monkeycode/docs/ARCHITECTURE.md) — 系统架构（含 V1.0 → V3.2 演进）
+- [ARCHITECTURE.md](.monkeycode/docs/ARCHITECTURE.md) — 系统架构（含 V1.0 → V3.3 演进）
 - [INTERFACES.md](.monkeycode/docs/INTERFACES.md) — 接口/数据库 Schema
 - [DEVELOPER_GUIDE.md](.monkeycode/docs/DEVELOPER_GUIDE.md) — 开发者指南
-- [DEPLOYMENT_V3.2.md](.monkeycode/docs/DEPLOYMENT_V3.2.md) — V3.2 部署指南（Docker 镜像 + 源码）
+- [DEPLOYMENT_V3.2.md](.monkeycode/docs/DEPLOYMENT_V3.2.md) — V3.2/V3.3 部署指南（Docker 镜像 + 源码）
 - [专有概念/V3.2-多角色与审核工作流.md](.monkeycode/docs/专有概念/V3.2-多角色与审核工作流.md) — 多角色权限与审核状态机
+- [专有概念/V3.3-导入灵活性.md](.monkeycode/docs/专有概念/V3.3-导入灵活性.md) — OA 字段映射、重复申请人列、预览中文表头
 
 ## License
 

@@ -699,7 +699,7 @@ def main():
     ensure_admin_user()
     set_start_time()
     server = http.server.HTTPServer(('0.0.0.0', PORT), APIHandler)
-    print(f'[V3.2] Server running on port {PORT}')
+    print(f'[V3.3] Server running on port {PORT}')
     server.serve_forever()
 
 

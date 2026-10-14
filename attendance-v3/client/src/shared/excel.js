@@ -3,6 +3,7 @@
 // XLSX 882KB 库懒加载：首次调用任何解析/导出方法时动态注入 <script>，避免阻塞 SPA 首屏（登录页）
 
 import Store from './store';
+import { FieldMap, mergeFieldMap, pickField, headerExists, resolveSubject, uniquifyHeaders, pickApplicantAndOther, headerBase, TYPE_IDENTIFY, RECORD_SCHEMA } from './fieldMap';
 
 let _xlsxLoading = null;
 
@@ -210,28 +211,24 @@ export const Excel = {
     }
     if (!ws) return { type: 'unknown', confidence: 0 };
 
-    const headerRow = (await this.sheetToArray(ws))[0] || [];
-    const headers = headerRow.map(h => String(h || '').trim().replace(/\s+/g, ''));
-
-    const typeRules = [
-      { type: 'punch', required: ['考勤号码', '签到时间'], bonus: ['签退时间', '迟到时间', '部门', '日期', '上班时间', '下班时间'] },
-      { type: 'leave', required: ['请假类型', '开始日期'], bonus: ['结束日期', '请假天数', '申请人', '申请部门', '是否本人', '请假人员'] },
-      { type: 'overtime', required: ['加班起止时间'], requiredAlt: ['开始时间', '结束时间'], bonus: ['申请人', '申请部门', '加班内容', '是否本人', '加班人员', '小时'] },
-      { type: 'travel', required: ['出差起止日期'], bonus: ['申请人', '目的地', '出差事由', '出差人员', '是否本人'] },
-      { type: 'miss_punch', required: ['忘打卡日期'], bonus: ['申请人', '忘打卡人员', '未打卡时间', '事由', '是否本人'] }
-    ];
+    const rows = await this.sheetToArray(ws);
+    const headerIdx = this._findHeaderRowIndex(rows);
+    const headers = uniquifyHeaders(rows[headerIdx] || []);
+    const fmap = await this._getFieldMap();
+    const types = fmap.types;
+    const aliasesOf = (type, field) => (types[type] && types[type][field]) || [];
 
     let bestType = 'unknown';
     let bestScore = 0;
-    for (const rule of typeRules) {
-      const requiredMatch = rule.required.every(r => headers.includes(r))
-        || (rule.requiredAlt ? rule.requiredAlt.every(r => headers.includes(r)) : false);
+    for (const [type, rule] of Object.entries(TYPE_IDENTIFY)) {
+      const requiredMatch = rule.required.every((f) => headerExists(headers, aliasesOf(type, f)))
+        || (rule.requiredAlt ? rule.requiredAlt.every((f) => headerExists(headers, aliasesOf(type, f))) : false);
       if (!requiredMatch) continue;
-      const bonusMatch = rule.bonus.filter(b => headers.includes(b)).length;
+      const bonusMatch = (rule.bonus || []).filter((f) => headerExists(headers, aliasesOf(type, f))).length;
       const score = rule.required.length + bonusMatch;
       if (score > bestScore) {
         bestScore = score;
-        bestType = rule.type;
+        bestType = type;
       }
     }
     return { type: bestType, confidence: bestType !== 'unknown' ? Math.min(bestScore / 8, 1.0) : 0 };
@@ -243,144 +240,142 @@ export const Excel = {
       return this.parseAllScheduleSheets(wb);
     }
     const ws = wb.Sheets[names[0]];
-    const raw = await this.sheetToJson(ws);
+    const rows = await this.sheetToArray(ws);
+    const fmap = await this._getFieldMap();
+    const learned = [];
     const records = [];
-    for (const row of raw) {
-      const rec = await this._normalizeRecord(row, fileType);
+    if (!rows.length) return records;
+    const headerIdx = this._findHeaderRowIndex(rows);
+    const headers = uniquifyHeaders(rows[headerIdx] || []);
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      if (row.every((c) => c === '' || c == null)) continue;
+      const obj = {};
+      for (let c = 0; c < headers.length; c++) {
+        if (!headers[c]) continue;
+        obj[headers[c]] = row[c] == null ? '' : row[c];
+      }
+      const rec = await this._normalizeRecord(obj, fileType, fmap, learned);
       if (rec) records.push(rec);
+    }
+    if (learned.length) {
+      try {
+        await FieldMap.learnMany(learned);
+        this._fieldMapCache = null;
+      } catch (e) { /* 学习失败不影响导入 */ }
     }
     return records;
   },
 
-  _isSelfValue(val) {
-    const s = String(val || '').replace(/\s+/g, '');
-    if (!s) return null;
-    if (s === '本人' || s === '是' || s === 'Y' || /^yes$/i.test(s) || /^true$/i.test(s)) return true;
-    return false;
+  _findHeaderRowIndex(rows) {
+    let bestIdx = 0;
+    let bestFilled = 0;
+    const limit = Math.min(rows.length, 20);
+    for (let i = 0; i < limit; i++) {
+      const row = rows[i] || [];
+      const filled = row.filter((c) => String(c || '').trim() !== '').length;
+      const text = row.map((c) => String(c || '').replace(/\s+/g, '')).join('|');
+      if (/申请人|请假类型|加班起止|出差起止|忘打卡|漏打卡|考勤号码|考勤号/.test(text) && filled >= bestFilled) {
+        return i;
+      }
+      if (filled > bestFilled) {
+        bestFilled = filled;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
   },
 
-  _resolveSubject(isSelfRaw, applicant, otherPerson) {
-    const applicantName = String(applicant || '').trim();
-    const other = String(otherPerson || '').trim();
-    if (this._isSelfValue(isSelfRaw) === true) return applicantName;
-    return other || applicantName;
+  async _getFieldMap() {
+    if (this._fieldMapCache) return this._fieldMapCache;
+    try {
+      this._fieldMapCache = await FieldMap.getMap();
+    } catch (e) {
+      this._fieldMapCache = mergeFieldMap(null);
+    }
+    return this._fieldMapCache;
   },
 
-  async _normalizeRecord(row, fileType) {
+  _learnHit(hit, learned, type, field) {
+    if (hit && hit.fuzzy && hit.score >= 60 && hit.header && type && field) {
+      learned.push({ type, field, header: headerBase(hit.header) });
+    }
+  },
+
+  _pick(clean, aliases, learned, type, field) {
+    const hit = pickField(clean, aliases);
+    this._learnHit(hit, learned, type, field);
+    return hit.value;
+  },
+
+  _pickPeople(clean, t, learned, fileType) {
+    const subjectAliases = [].concat(t.subjectPerson || [], t.travelers || []);
+    const picked = pickApplicantAndOther(clean, t.applicant || [], subjectAliases);
+    this._learnHit(picked.applicant, learned, fileType, 'applicant');
+    this._learnHit(picked.other, learned, fileType, 'subjectPerson');
+    return {
+      applicant: String(picked.applicant.value || '').trim(),
+      other: String(picked.other.value || '').trim(),
+    };
+  },
+
+  async _coerce(kind, raw) {
+    if (kind === 'date') return this._formatDate(raw);
+    if (kind === 'time') return this._formatTime(raw);
+    if (kind === 'datetime') return this._formatDateTime(raw);
+    if (kind === 'num') return parseFloat(raw) || 0;
+    if (kind === 'bool') return ['是', 'True', 'true', 'TRUE', '1'].includes(String(raw || ''));
+    return raw == null ? '' : raw;
+  },
+
+  async _normalizeRecord(row, fileType, fmap, learned) {
+    const schema = RECORD_SCHEMA[fileType];
+    if (!schema) return null;
     const clean = {};
     for (const key of Object.keys(row)) {
-      const cleanKey = key.replace(/\s+/g, '');
-      clean[cleanKey] = row[key];
+      clean[key.replace(/\s+/g, '')] = row[key];
     }
-
-    switch (fileType) {
-      case 'punch':
-        return {
-          employeeNo: clean['考勤号码'] || clean['考勤号'] || '',
-          customNo: clean['自定义编号'] || '',
-          name: clean['姓名'] || '',
-          date: await this._formatDate(clean['日期']),
-          period: clean['对应时段'] || '',
-          scheduleStart: this._formatTime(clean['上班时间']),
-          scheduleEnd: this._formatTime(clean['下班时间']),
-          signIn: this._formatTime(clean['签到时间']),
-          signOut: this._formatTime(clean['签退时间']),
-          lateMinutes: parseFloat(clean['迟到时间']) || 0,
-          earlyMinutes: parseFloat(clean['早退时间']) || 0,
-          absent: ['是', 'True', 'true', 'TRUE', '1'].includes(String(clean['是否旷工'] || '')),
-          overtimeHours: parseFloat(clean['加班时间']) || 0,
-          workHours: parseFloat(clean['工作时间']) || 0,
-          department: clean['部门'] || '',
-          isWeekday: clean['平日'] || '',
-          isWeekend: clean['周末'] || '',
-          isHoliday: clean['节假日'] || '',
-          weekdayOT: parseFloat(clean['平日加班']) || 0,
-          weekendOT: parseFloat(clean['周末加班']) || 0,
-          holidayOT: parseFloat(clean['节假日加班']) || 0
-        };
-
-      case 'leave': {
-        const leaveStart = await this._formatDate(clean['开始日期']);
-        const leaveEnd = await this._formatDate(clean['结束日期']);
-        const leaveApplicant = clean['申请人'] || '';
-        const leaveIsSelf = String(clean['是否本人'] || '').trim();
-        return {
-          applicant: leaveApplicant,
-          department: clean['申请部门'] || '',
-          leaveType: clean['请假类型'] || '',
-          startDate: leaveStart,
-          endDate: leaveEnd || leaveStart,
-          leaveDays: parseFloat(clean['请假天数']) || 0,
-          leaveHours: parseFloat(clean['小时']) || 0,
-          reason: clean['请假事由'] || '',
-          isSelf: leaveIsSelf,
-          subject: this._resolveSubject(leaveIsSelf, leaveApplicant, clean['请假人员'])
-        };
-      }
-
-      case 'overtime': {
-        const otRange = clean['加班起止时间'] || '';
-        const otHours = clean['小时'] || '';
-        const otApplicant = clean['申请人'] || '';
-        const otIsSelf = String(clean['是否本人'] || '').trim();
+    const map = fmap || mergeFieldMap(null);
+    const t = map.types[fileType] || {};
+    const learnedList = learned || [];
+    const pick = (field) => this._pick(clean, t[field], learnedList, fileType, field);
+    const rec = {};
+    for (const [field, kind] of Object.entries(schema.fields)) {
+      rec[field] = await this._coerce(kind, pick(field));
+    }
+    if (schema.oa) {
+      const isSelf = String(pick('isSelf') || '').trim();
+      const people = this._pickPeople(clean, t, learnedList, fileType);
+      rec.applicant = people.applicant;
+      rec.isSelf = isSelf;
+      rec.subject = resolveSubject(isSelf, people.applicant, people.other, map.selfTrueValues, map.selfFalseValues);
+      if (schema.after === 'leaveEndFallback') {
+        rec.endDate = rec.endDate || rec.startDate;
+      } else if (schema.after === 'overtimeRange') {
+        const otRange = pick('overtimeRange') || '';
         const hasRange = String(otRange).trim() !== '';
-        const otStart = hasRange
+        rec.startTime = hasRange
           ? (typeof otRange === 'number' ? (otRange > 1 ? await this._formatDate(otRange) : this._formatTime(otRange)) : String(otRange).trim())
-          : await this._formatDateTime(clean['开始时间']);
-        return {
-          applicant: otApplicant,
-          department: clean['申请部门'] || '',
-          startTime: otStart,
-          endTime: hasRange ? '' : await this._formatDateTime(clean['结束时间']),
-          overtimeHours: parseFloat(otHours) || 0,
-          content: clean['加班内容'] || '',
-          isSelf: otIsSelf,
-          subject: this._resolveSubject(otIsSelf, otApplicant, clean['加班人员'])
-        };
+          : await this._formatDateTime(pick('startTime'));
+        rec.endTime = hasRange ? '' : await this._formatDateTime(pick('endTime'));
+      } else if (schema.after === 'travelRange') {
+        const travelDate = pick('travelRange') || '';
+        const parts = String(travelDate).split(/[~至到]/).filter(Boolean);
+        rec.startDate = await this._formatDate(parts[0] || '');
+        rec.endDate = await this._formatDate(parts[1] || parts[0] || '');
+        rec.travelers = people.other || pick('travelers') || '';
+        rec.subject = resolveSubject(isSelf, people.applicant, rec.travelers, map.selfTrueValues, map.selfFalseValues);
+      } else if (schema.after === 'missPerson') {
+        rec.missPerson = people.other;
+        rec.subject = resolveSubject(isSelf, people.applicant, rec.missPerson, map.selfTrueValues, map.selfFalseValues);
       }
-
-      case 'travel': {
-        const travelDate = clean['出差起止日期'] || '';
-        const travelDateParts = travelDate.split(/[~至到]/).filter(Boolean);
-        const travelStart = travelDateParts[0] || '';
-        const travelEnd = travelDateParts[1] || travelStart;
-        const travelApplicant = clean['申请人'] || '';
-        const travelIsSelf = String(clean['是否本人'] || '').trim();
-        const travelers = clean['出差人员'] || '';
-        return {
-          applicant: travelApplicant,
-          department: clean['申请部门'] || '',
-          destination: clean['目的地'] || '',
-          travelers,
-          startDate: await this._formatDate(travelStart),
-          endDate: await this._formatDate(travelEnd),
-          travelType: clean['出差类型'] || '',
-          reason: clean['出差事由'] || '',
-          isSelf: travelIsSelf,
-          subject: this._resolveSubject(travelIsSelf, travelApplicant, travelers)
-        };
-      }
-
-      case 'miss_punch': {
-        const missApplicant = clean['申请人'] || '';
-        const missIsSelf = String(clean['是否本人'] || '').trim();
-        const missPerson = clean['忘打卡人员'] || '';
-        return {
-          applicant: missApplicant,
-          department: clean['申请部门'] || '',
-          missDate: await this._formatDate(clean['忘打卡日期']),
-          missPerson,
-          missTime: this._formatTime(clean['未打卡时间']),
-          cardTime: this._formatTime(clean['当天刷卡时间']),
-          reason: clean['事由'] || '',
-          isSelf: missIsSelf,
-          subject: this._resolveSubject(missIsSelf, missApplicant, missPerson)
-        };
-      }
-
-      default:
-        return null;
     }
+    if (schema.order) {
+      const ordered = {};
+      for (const k of schema.order) ordered[k] = rec[k];
+      return ordered;
+    }
+    return rec;
   },
 
   async _formatDate(val) {

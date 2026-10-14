@@ -70,14 +70,14 @@
         <div class="pm-body">
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th v-for="col in previewColumns" :key="col">{{ col }}</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, ri) in previewRows" :key="ri">
-                  <td v-for="col in previewColumns" :key="col">{{ row[col] }}</td>
-                </tr>
-              </tbody>
+               <thead>
+                 <tr><th v-for="col in previewColumns" :key="col">{{ previewLabel(col) }}</th></tr>
+               </thead>
+               <tbody>
+                 <tr v-for="(row, ri) in previewRows" :key="ri">
+                   <td v-for="col in previewColumns" :key="col">{{ formatPreviewCell(row[col], col) }}</td>
+                 </tr>
+               </tbody>
             </table>
           </div>
           <div v-if="previewFile.records.length > previewRows.length" class="muted-text" style="margin-top:8px">
@@ -96,6 +96,7 @@ import AppIcon from '../components/AppIcon.vue';
 import { apiRequest } from '../shared/api';
 import Store from '../shared/store';
 import Auth from '../shared/auth';
+import { labelForField, isSelfValue } from '../shared/fieldMap';
 
 const fileInput = ref(null);
 const dragging = ref(false);
@@ -113,6 +114,24 @@ const TYPE_LABELS = { punch: '打卡', leave: '请假', overtime: '加班', trav
 
 function typeLabel(type) {
   return TYPE_LABELS[type] || type;
+}
+
+function previewLabel(col) {
+  const type = previewFile.value && previewFile.value.fileType;
+  return labelForField(type, col);
+}
+
+function formatPreviewCell(val, col) {
+  if (col === 'isSelf') {
+    const judged = isSelfValue(val);
+    if (judged === true) return '本人';
+    if (judged === false) return '其它';
+    return '（空）';
+  }
+  if (val === true) return '是';
+  if (val === false) return '否';
+  if (val == null || val === '') return '—';
+  return val;
 }
 
 onMounted(loadStats);

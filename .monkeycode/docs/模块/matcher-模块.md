@@ -40,16 +40,17 @@ Matcher.resolveEmployeeNo("梁XX", "市场营销部")  // → "75"
 
 ```js
 // 返回：
-[{ index: 0, employeeNo: "75", applicant: "梁XX", department: "市场营销部" }, ...]
+[{ index: 0, employeeNo: "75", applicant: "梁XX", subject: "梁XX", department: "市场营销部" }, ...]
 ```
 
-匹配逻辑：`applicant|department` 组合键 → 查 `buildEmployeeMap()` 的 `name|department` 反向映射。
+匹配逻辑（V3.3）：人员取 `subject || applicant`。先 `name|department`；未命中且该姓名在员工表仅一条则回退该考勤号。同名多人且部门对不上保持 `employeeNo = null`。
 
 ## 匹配策略
 
 两步匹配策略：
 1. **考勤号匹配**：按 `employeeNo` 直接关联（精确）
-2. **姓名+部门匹配**：按 `name + department` 降级关联（当 OA 文件无考勤号时）
+2. **姓名+部门匹配**：按 `subject/applicant + department` 降级关联（当 OA 文件无考勤号时）
+3. **同名唯一回退（V3.3）**：部门键未命中、该姓名仅一人时用其考勤号（代申请部门写的是申请人部门时仍能绑到实际员工）
 
 员工列表以打卡数据为权威来源，打卡导入后同步。
 

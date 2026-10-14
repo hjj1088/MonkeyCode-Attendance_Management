@@ -413,7 +413,7 @@ V3.1（前后端分离 + 静态 HTML）          V3.2（多角色 + SPA）
 | 数据存储 | SQLite，15 张表（camelCase 字段） | 持久化 |
 | 导出 | Python `openpyxl`（`handlers/export.py`） | XLSX 生成 |
 
-## 项目结构（V3.2）
+## 项目结构（V3.2 / V3.3）
 
 ```
 attendance-v3/
@@ -431,6 +431,7 @@ attendance-v3/
 │       │   ├── api.js           # fetch 封装（Bearer、401 清 token 跳登录）
 │       │   ├── store.js         # Store 接口 → /api/store/*
 │       │   ├── auth.js / constants.js / excel.js / matcher.js
+│       │   ├── fieldMap.js      # V3.3 OA 字段映射、重复申请人列、预览中文表头
 │       │   └── rules.js         # 考勤规则引擎（calculateMonth 全量迁移）
 │       ├── components/          # AppSidebar / AttendanceTable / AttendanceCalendar
 │       └── views/               # Login/SetupWizard/Settings/RulesSettings/
@@ -442,13 +443,15 @@ attendance-v3/
 │   └── handlers/
 │       ├── auth.py              # login / change-password / 锁定逻辑
 │       ├── users.py             # 用户 CRUD / 启禁用 / 重置密码
-│       ├── system.py            # version/status/config/admin-password/seed/reset
+│       ├── system.py            # version（APP_VERSION 3.3.0）/status/config/admin-password/seed/reset
 │       ├── rules.py             # attendance_config / tolerance / holidays / work-schedule
 │       ├── attendance.py        # import / calculate / my / all / review / dept/submit / lock
 │       ├── export.py            # build_flat_report / build_calendar_report
 │       └── migrate.py           # V2.0 JSON 迁移（含失败回滚）
-└── tests/                       # 104 项测试（pytest + Node 驱动前端 rules）
+└── tests/                       # pytest + Node 驱动前端 rules；V3.3 含 field_map
 ```
+
+V3.3 相对 V3.2 的结构增量：`client/src/shared/fieldMap.js`、规则设置「OA 字段」Tab、`tests/field_map.mjs` / `tests/test_field_map.py`、OA 四表 `isSelf`/`subject` 列。规格在 `.monkeycode/specs/v3.3-import-flexibility/`。
 
 ## 多角色与权限模型
 
@@ -522,7 +525,7 @@ pending_review ──确认──► confirmed ──部门/人事提交──�
 
 ## 数据流（V3.2）
 
-1. **导入**：前端 `Excel.parseExcelFile()` 解析 → `POST /api/attendance/import` → 后端按类型落库（punch 导入前清空整表、`_sync_employees` 建立名册、记录 `settings.last_punch_month`、schedule 需先有名册）。排班：`parseScheduleSheet` 必须 `await sheetToArray`；界面条数/预览用 `flattenScheduleDays` 按天展开；入库 `records` 仍为「月 × 员工」对象。
+1. **导入**：前端 `Excel.parseExcelFile()` 解析 → `POST /api/attendance/import` → 后端按类型落库（punch 导入前清空整表、`_sync_employees` 建立名册、记录 `settings.last_punch_month`、schedule 需先有名册）。排班：`parseScheduleSheet` 必须 `await sheetToArray`；界面条数/预览用 `flattenScheduleDays` 按天展开；入库 `records` 仍为「月 × 员工」对象。V3.3：识别与标准化读 `settings.oa_field_map`；OA 记录带 `subject`；`Matcher.matchOAToPunch` 按主体绑考勤号。
 2. **计算**：前端 `RulesEngine.calculateMonth()`（`shared/rules.js`）拉取数据、浏览器内计算 → `POST /api/attendance/calculate`（body 含 results + carry_over）→ 后端删除该月旧结果后批量落库
 3. **审核**：`PATCH /api/attendance/{id}/review`（确认/申诉）→ `dept/submit`（部门提交）→ `lock`（人事锁定）
 4. **导出**：前端读 `attendance_results` → `POST /api/export/flat|calendar` → openpyxl XLSX 下载
@@ -558,7 +561,23 @@ pending_review ──确认──► confirmed ──部门/人事提交──�
 | 数据库 | 13 张表 | +users / operation_logs；attendance_results +id/review 三字段 |
 | 计算落库 | `Store.clearTable + bulkPut` | `POST /api/attendance/calculate`（删除该月旧结果） |
 | 前端 dev | 后端直出静态页 | Vite dev 8002 + proxy `/api`→8001 |
-| 测试 | 部分与实现脱节 | 104 项全通过（含 Node 驱动前端 rules） |
+| 测试 | 部分与实现脱节 | pytest + Node 驱动前端 rules；V3.3 另有 field_map 用例 |
+
+## V3.3 导入灵活性
+
+分支 `261008-feat-oa-field-map`。`APP_VERSION = '3.3.0'`，`version_name = 'V3.3'`（`handlers/system.py`）。登录页、侧栏、系统设置「应用版本」读 `GET /api/system/version`（该接口公开，无需 token）。
+
+目标：OA 表头改名、代他人申请仍能识别并绑对人。
+
+- 新模块：`client/src/shared/fieldMap.js`，settings 键 `oa_field_map`
+- `excel.js` 识别/标准化走别名；重复「申请人」列按是否本人分流（本人→第1列，其它→第2列）；模糊命中 score >= 60 调用 `learnMany`；`_getFieldMap` 有缓存
+- `ImportView` 预览表头用中文 `FIELD_LABELS`（`applicant`→申请人，`subject`→实际人员）
+- `matcher.js`：人员 `subject || applicant`；姓名+部门未命中且同名仅一人则回退考勤号
+- 规则设置「OA 字段」Tab：请假 / 漏打卡 / 加班 / 出差 / 打卡
+- OA 四表列 `isSelf`、`subject`（`database.py` 建表 + `_migrate` ALTER）
+- 规格：`.monkeycode/specs/v3.3-import-flexibility/`；概念：[专有概念/V3.3-导入灵活性.md](./专有概念/V3.3-导入灵活性.md)
+
+测试：`tests/test_field_map.py` stub Store 后 Node 跑 `tests/field_map.mjs`。
 
 ## V3.2 已知情况（如实记录）
 

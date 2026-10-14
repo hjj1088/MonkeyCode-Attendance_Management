@@ -6,7 +6,7 @@
 
 | 文档 | 说明 |
 |------|------|
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构：技术栈、模块关系、数据流、设计系统、v1.0 vs v2.0 vs v3.1 vs v3.2 |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构：技术栈、模块关系、数据流、设计系统、v1.0 vs v2.0 vs v3.1 vs v3.2 vs v3.3 |
 | [INTERFACES.md](./INTERFACES.md) | 接口文档：IndexedDB 数据库 Schema、REST API、所有模块 API、文件类型识别规则 |
 | [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md) | 开发者指南：环境搭建、CSS 定制、调试方法、常见问题 |
 
@@ -28,6 +28,7 @@
 | [模块/db-模块.md](./模块/db-模块.md) | 数据库层（V2.0）：13张表 Schema、Store CRUD、自动恢复、初始化 |
 | [模块/rules-模块.md](./模块/rules-模块.md) | 规则引擎：考勤计算、迟到早退判定、容错豁免、结余管理、工作时长 |
 | [模块/excel-模块.md](./模块/excel-模块.md) | Excel 处理：文件解析、类型识别、导出 API 调用（Python 后端） |
+| [模块/fieldMap-模块.md](./模块/fieldMap-模块.md) *(v3.3)* | OA 字段映射：别名、打分、subject、settings.oa_field_map |
 | [模块/matcher-模块.md](./模块/matcher-模块.md) | 数据匹配：员工映射、OA 到打卡关联、跨表匹配 |
 | [模块/auth-模块.md](./模块/auth-模块.md) | 认证：V2.0 localStorage；V3.2 JWT + sessionStorage + 角色守卫 |
 | [模块/export-server-模块.md](./模块/export-server-模块.md) | 导出服务（V2.0）：HTTP 导出 API、XLSX 生成、CORS 支持 |
@@ -43,7 +44,18 @@
 | [专有概念/V3.2-多角色与审核工作流.md](./专有概念/V3.2-多角色与审核工作流.md) *(v3.2)* | superadmin/hradmin/deptadmin/employee、审核状态机、24h 锁定、SPA 布局 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md#v32-架构多角色--前端重建) *(v3.2)* | V3.2 架构：Vite SPA、handler 全量挂载、路由表、数据流、v3.1 对照 |
 | [INTERFACES.md](./INTERFACES.md#v32-rest-api多角色系统) *(v3.2)* | V3.2 REST API：users/operation_logs 表、审核接口、store 表名映射、序列化规则 |
-| [DEPLOYMENT_V3.2.md](./DEPLOYMENT_V3.2.md) *(v3.2)* | V3.2 部署指南：Docker 镜像（GHCR）部署、源码部署、数据持久化、初始账号 |
+| [DEPLOYMENT_V3.2.md](./DEPLOYMENT_V3.2.md) *(v3.2/v3.3)* | 部署指南：Docker 镜像（GHCR）部署、源码部署、数据持久化、初始账号；V3.2/V3.3 同流程 |
+
+## V3.3
+
+| 文档 | 说明 |
+|------|------|
+| [专有概念/V3.3-导入灵活性.md](./专有概念/V3.3-导入灵活性.md) *(v3.3)* | Field Map、模糊表头、重复申请人列、预览中文表头、代申请 subject、自动学习 |
+| [专有概念/数据文件类型与格式.md](./专有概念/数据文件类型与格式.md) *(v3.3)* | 6 类导入格式 + OA 别名默认表头 |
+| [模块/fieldMap-模块.md](./模块/fieldMap-模块.md) *(v3.3)* | fieldMap.js API |
+| [模块/excel-模块.md](./模块/excel-模块.md) *(v3.3)* | identifyFileType / _normalizeRecord 走 Field Map |
+| [模块/matcher-模块.md](./模块/matcher-模块.md) *(v3.3)* | matchOAToPunch 按 subject + 同名唯一回退 |
+| 规格 `.monkeycode/specs/v3.3-import-flexibility/` | requirements / design / tasklist；分支 `261008-feat-oa-field-map` |
 
 ## 快速导航
 
@@ -52,11 +64,12 @@
 - **了解 V3.1 架构**：参考 [专有概念/V3.1-数据层迁移.md](./专有概念/V3.1-数据层迁移.md)
 - **了解视觉设计**：参考 [专有概念/Big-Sur-设计系统.md](./专有概念/Big-Sur-设计系统.md)
 - **修改考勤规则**：参考 [专有概念/考勤规则引擎.md](./专有概念/考勤规则引擎.md)
-- **新增数据导入类型**：参考 [专有概念/数据文件类型与格式.md](./专有概念/数据文件类型与格式.md)
+- **了解 V3.3 导入灵活性**：参考 [专有概念/V3.3-导入灵活性.md](./专有概念/V3.3-导入灵活性.md)
+- **新增数据导入类型 / 字段别名**：参考 [专有概念/数据文件类型与格式.md](./专有概念/数据文件类型与格式.md) 与 [模块/fieldMap-模块.md](./模块/fieldMap-模块.md)
 - **自定义 CSS 样式**：参考 [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md) 中的 CSS 定制章节
 - **修改数据库结构**：参考 [模块/db-模块.md](./模块/db-模块.md)（V2.0）或 [模块/V3.1-后端服务-模块.md](./模块/V3.1-后端服务-模块.md)（V3.1/V3.2）
-- **V3.2 开发预览**：8002 Vite 热更新；8001 后端 + `dist/`。见 [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md) V3.2 节
+- **开发预览**：8002 Vite 热更新；8001 后端 + `dist/`。见 [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md) V3.2/V3.3 节
 
 ## 版本
 
-当前版本：**v3.2**（Vite SPA + 四角色 + 审核工作流）。标注 `*(v2.0)*` / `*(v3.1)*` / `*(v3.2)*` 的文档为对应版本新增。V2.0/V3.1 章节保留作对照。
+当前版本：**v3.3**（导入灵活性：OA 字段映射）。V3.2 为多角色 SPA 基线。标注 `*(v2.0)*` / `*(v3.1)*` / `*(v3.2)*` / `*(v3.3)*` 的文档为对应版本新增。

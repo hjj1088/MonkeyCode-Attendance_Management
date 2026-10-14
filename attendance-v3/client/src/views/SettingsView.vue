@@ -48,7 +48,7 @@
       <div v-if="status" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
         <div class="form-group" style="margin:0">
           <label class="form-label">应用版本</label>
-          <div class="stat-value">V3.2.0</div>
+          <div class="stat-value">{{ appVersionText }}</div>
         </div>
         <div class="form-group" style="margin:0">
           <label class="form-label">数据库大小</label>
@@ -109,6 +109,11 @@ const uptimeText = computed(() => {
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
   return d > 0 ? `${d}天${h}小时` : `${h}小时${m}分`;
+});
+
+const appVersionText = computed(() => {
+  const v = status.value && status.value.app_version;
+  return v ? ('V' + v) : 'V3.3.0';
 });
 
 onMounted(async () => {

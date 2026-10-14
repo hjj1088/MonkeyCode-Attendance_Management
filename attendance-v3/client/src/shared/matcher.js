@@ -33,16 +33,23 @@ export const Matcher = {
 
   matchOAToPunch(oaRecords, employeeMap) {
     const nameDeptToNo = {};
+    const nameToNos = {};
     for (const [no, info] of Object.entries(employeeMap || {})) {
       const key = `${info.name}|${info.department}`;
       nameDeptToNo[key] = no;
+      if (!nameToNos[info.name]) nameToNos[info.name] = [];
+      nameToNos[info.name].push(no);
     }
     const matches = [];
     for (let i = 0; i < (oaRecords || []).length; i++) {
       const rec = oaRecords[i];
       const person = rec.subject || rec.applicant;
       const key = `${person}|${rec.department}`;
-      const employeeNo = nameDeptToNo[key] || null;
+      let employeeNo = nameDeptToNo[key] || null;
+      if (!employeeNo && person) {
+        const nos = nameToNos[person] || [];
+        if (nos.length === 1) employeeNo = nos[0];
+      }
       matches.push({ index: i, employeeNo, applicant: rec.applicant, subject: person, department: rec.department });
     }
     return matches;
