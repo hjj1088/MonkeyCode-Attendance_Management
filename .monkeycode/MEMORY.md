@@ -93,3 +93,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - rules.js 漏打卡时段匹配（`_missCoversPeriod`）：missTime 上午/下午词或具体时间（12:00 分界），空值按全天覆盖；半缺勤旷工判定按时段匹配
   - calc_flow.mjs 多员工 mock 时 `rowFor(date)` 必须带 employeeNo，否则 find 取到第一个员工的同名日期行
   - tests/test_calendar_cells.py 有 7 个存量失败（export.py 写入 datetime.time 对象、测试期望字符串），与考勤计算无关，属 V3.1.1 日历导出层
+
+[应用版本号同步链路]
+- Date: 2026-10-15
+- Context: Agent 打 v3.3.1 tag 后 UI 仍显示 V3.3.0，用户指出需同步
+- Category: 工作流协作
+- Instructions:
+  - UI 版本显示事实源：`attendance-v3/server/handlers/system.py` 的 `APP_VERSION`（侧栏/登录页/系统设置均读 `GET /api/system/version`）
+  - 打版本 tag（vX.Y.Z）时必须同步：`APP_VERSION`、`client/package.json` + `package-lock.json`、`AppSidebar.vue`/`SettingsView.vue` 的接口失败回退默认值；`version_name` 只写主版本段（如 'V3.3'），patch 由前端拼接
+  - tag 需指向含版本号修正的提交：`git tag -f vX.Y.Z && git push -f origin vX.Y.Z`（tag 刚推无消费者时可强推）
+  - push main 即触发 GHCR 双镜像构建（V2 + V3），tag 额外产出 semver 标签；沙箱无 docker daemon，无需本地构建
