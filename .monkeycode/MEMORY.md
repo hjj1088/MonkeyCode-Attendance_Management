@@ -82,3 +82,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 生产 JWT 在 compose `environment` 写 `JWT_SECRET`；当前 compose 未注入该变量
   - `docker pull ghcr.io/hjj1088/monkeycode-attendance_management-v3:latest` 报 `denied`：GHCR 包默认 Private；改 Package visibility 为 Public，或 `docker login ghcr.io` 后 pull；否则本地 `docker compose up -d --build`
   - 开发沙箱无 docker daemon，`docker compose` 不可执行；本地生产形态验证：`client npm run build` 后 server.py 挂载 dist（StaticFiles 每请求读磁盘，前端改动构建后无需重启 8001 进程），镜像构建 Stage 1 内置 `npm run build`，服务器只需 pull 源码后 compose build
+
+[考勤计算与 OA 导入联动要点]
+- Date: 2026-10-15
+- Context: Agent 修复 V3.3 导入层与考勤计算脱节时发现
+- Category: 排错调试
+- Instructions:
+  - 考勤计算引擎 `client/src/shared/rules.js` 的 OA 匹配键是 `r.subject || r.applicant`（`_oaNames`），漏打卡另含 `missPerson`；V3.3 前导入的旧记录无 subject 列，代申请记录会错挂在申请人名下，重算前需确认记录已按 V3.3 重新导入
+  - rules.js 请假豁免逻辑（V3.3.1 起）：全天假 status=leave 清迟到早退；短假按 leaveHours*60 抵扣迟到/早退分钟数，抵扣后为 0 则 normal
+  - rules.js 漏打卡时段匹配（`_missCoversPeriod`）：missTime 上午/下午词或具体时间（12:00 分界），空值按全天覆盖；半缺勤旷工判定按时段匹配
+  - calc_flow.mjs 多员工 mock 时 `rowFor(date)` 必须带 employeeNo，否则 find 取到第一个员工的同名日期行
+  - tests/test_calendar_cells.py 有 7 个存量失败（export.py 写入 datetime.time 对象、测试期望字符串），与考勤计算无关，属 V3.1.1 日历导出层

@@ -231,7 +231,7 @@ npm run dev
 - 路由：`src/router/index.js`。无 token 时 `defaultPath()` 直跳 `/login`，不经 `/attendance`。
 - 认证：`src/shared/auth.js`，token + user 在 `sessionStorage`。
 - Vite：`vite.config.js` `appType: 'spa'` + `spaHtmlFallback()`。刷新 `/attendance` 必须回 `index.html`，否则命中旧 `client/attendance.html`。
-- 计算：`src/shared/rules.js`，`RULES_VERSION = '1.0.28'`。后端只存结果。
+- 计算：`src/shared/rules.js`，`RULES_VERSION = '1.0.30'`。后端只存结果。
 - 导入别名（V3.3）：`src/shared/fieldMap.js`。改默认表头在 `DEFAULT_OA_FIELD_MAP`；设置页保存或 `learnMany` 后清 `Excel._fieldMapCache`。两列同名「申请人」：本人取第 1 列，其它取第 2 列。导入预览表头走 `labelForField`。
 - 应用版本：改 `handlers/system.py` 的 `APP_VERSION` / `version_name`。登录页、侧栏、系统设置读 `GET /api/system/version`。
 - 排班：`parseScheduleSheet` 必须 `await sheetToArray`。界面按天计数（`flattenScheduleDays`），入库仍按月对象。

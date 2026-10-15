@@ -43,3 +43,19 @@
 
 1. 导入预览不展示命中列名（已改为中文列名，仍不展示「命中了 Excel 哪一列」）
 2. 无 Field Map 专用 REST，走 store/settings
+
+## 后续修复（V3.3.1，2026-10-15）
+
+V3.3 只改导入层，考勤计算引擎（rules.js）未适配，产生脱节。已补：
+
+- [x] F1. `rules.js` 请假豁免迟到/早退 [迟到 56min + 请假 1h 场景]
+  - 短假（leaveDays < 1）有打卡时，迟到分钟数被请假时长（leaveHours*60）抵扣，抵扣后为 0 则状态 normal
+  - 全天假（status=leave）迟到早退直接清零
+  - abnormal 判定改用抵扣后 adjustedLateMinutes
+  - RULES_VERSION 1.0.29 → 1.0.30
+- [x] F2. `rules.js` 漏打卡说明按时段匹配
+  - 新增 `_missCoversPeriod`：missTime 含上午/下午词或具体时间（12:00 分界）推断覆盖时段；空值按全天
+  - 半缺勤（缺签到或签退）旷工判定按时段匹配：缺上午打卡需说明覆盖上午，缺下午同理
+  - 完全无打卡 + 任一漏打卡说明 → normal 保持不变
+- [x] F3. `tests/calc_flow.mjs` 补场景：短假豁免（代请假 subject 王五）、短假不足抵扣（86-30=56min）、漏打卡上午/下午/具体时间
+  - `rowFor` 加 employeeNo 参数（多员工结果行）

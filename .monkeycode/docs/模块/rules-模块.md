@@ -4,9 +4,9 @@
 
 ## RULES_VERSION 常量 (v1.0.26)
 
-`const RULES_VERSION = '1.0.28'`，定义于 rules.js 顶部。版本号随每次规则逻辑变更递增。
+`const RULES_VERSION = '1.0.30'`，定义于 rules.js 顶部。版本号随每次规则逻辑变更递增。
 
-**用途**：`attendance.html` 的 `loadResults()` 读取该版本号，与 `settings` 表中存储的 `rules_version` 比对。若不一致，说明规则代码已更新，将自动触发重新计算而非使用陈旧的缓存结果。
+**用途**：考勤页 `loadResults()` 读取该版本号，与 `settings` 表中存储的 `rules_version` 比对。若不一致，说明规则代码已更新，将自动触发重新计算而非使用陈旧的缓存结果。
 
 **存储**：计算完成后将 `RULES_VERSION` 写入 `settings` 表的 `rules_version` 键。
 
@@ -44,6 +44,22 @@
 
 优先级：假期管理 > 排班表 > 默认上班
 
+### `_oaNames(r)` / `_matchOAName(r, employeeName)`
+
+解析 OA 记录的实际人员：`subject`（V3.3 导入层解析的代申请实际人，缺省回退 `applicant`）按 `,，、;；/／` 拆分多姓名；漏打卡记录额外并入 `missPerson`。`_matchOAName` 对姓名去空白后比对。
+
+### `_matchOA(oaRecords, employeeName, dateStr, dateStartField, dateEndField)`
+
+按姓名 + 日期区间过滤 OA 记录（请假/出差）。`startDate` 为空整条不命中。
+
+### `_missCoversPeriod(m, period)` (v1.0.30)
+
+判断漏打卡说明覆盖的时段：
+
+- `missTime` 含「上午/早上/早晨/晨」→ 覆盖 am；含「下午/中午/傍晚/晚」→ 覆盖 pm
+- `missTime` 为具体时间（`HH:MM`）→ ≤12:00 覆盖 am，>12:00 覆盖 pm
+- `missTime` 为空或无法识别 → 按全天覆盖
+
 ### `calculateMonth(targetMonth)` - 核心流程
 
 1. 读取配置 + 假期数据
@@ -52,7 +68,7 @@
 4. 获取该员工的排班表
 5. 按日期 (1日 ~ 月末) 遍历每天：
    - `_isWorkDay()` 判断是否休息日
-   - 判断 `status` (normal → rest → leave → travel → normal(漏打卡) → absent → no_sign_in/no_sign_out → abnormal)
+   - 判断 `status` (normal → rest → leave → travel → normal(漏打卡) → absent → abnormal)
    - 计算偏差和加班
    - 产出结果记录 (含 sourcePunchIds 等关联 ID)
 
@@ -62,17 +78,17 @@
 
    **v1.0.27 修复**：容错豁免逻辑修正。原先将全月所有 `status === 'abnormal'` 的记录无条件重置为 `normal`，导致未打卡导致的 `abnormal` 也被错误豁免。现在使用 `lateDateSet = new Set(lateRecords.map(r => r.date))`，仅对实际出现在 `lateRecords`（迟到日期列表）中的记录执行复位。
 
-   **v1.0.28 修复**：未打卡状态细分与迟到拦截增强。
-   - 新增 `no_sign_in`（上班未打卡，有签退无签到）和 `no_sign_out`（下班未打卡，有签到无签退）两种细分状态
-   - 判断时机位于 absent 检查之后、迟到检查之前（第 5 步内部）
-   - 迟到判定增加守卫条件 `status !== 'no_sign_in' && status !== 'no_sign_out'`，防止未打卡状态被迟到 (`abnormal`) 覆盖
+   **v1.0.30 修复（V3.3.1，OA 数据与计算联动）**：
+   - **请假豁免迟到/早退**：当天有请假记录时，`leaveHours * 60` 抵扣迟到与早退分钟数（各自独立抵扣）；抵扣后为 0 则不计迟到。全天假（`status = 'leave'`）迟到早退直接清零。`abnormal` 判定改用抵扣后的 `adjustedLateMinutes`。场景：迟到 56min + 请假 1h → normal
+   - **漏打卡时段匹配**：半缺勤（有打卡但缺单边）旷工判定按时段细化——缺上午打卡需漏打卡说明覆盖 am（`_missCoversPeriod`），缺下午同理；说明时段对不上仍判 `absent`。完全无打卡 + 任一漏打卡说明 → normal 保持不变。场景：缺上午打卡 + 说明「上午」→ normal；说明「下午」→ absent
+   - 说明：历史文档曾描述 v1.0.28 引入 `no_sign_in`/`no_sign_out` 细分状态，git 全历史中 rules.js 从未包含该实现，半缺勤一直判定为 `absent`，特此更正
 6. 全月汇总后执行容错豁免
 7. 更新加班结余 (`_updateCarryOver`)
 8. 清空旧结果 → 写入新结果
 
-### `_updateCarryOver(employeeNo, name, targetMonth, monthOvertime, leaveRecords)`
+### `_updateCarryOver(employeeNo, name, targetMonth, monthOvertime, leaveRecords, carryOverList, empCarry)`
 
-更新加班结余。公式：`newBalance = prevBalance + monthOvertime - 调休消耗`。
+更新加班结余。公式：`newBalance = prevBalance + monthOvertime - 调休消耗`。调休消耗按 `_matchOAName(l, name)` 匹配该员工名下所有 `leaveType` 含「调休」的请假记录。`empCarry` 传入该员工已有结余记录，取 `prevMonthKey`（targetMonth - 2 个月）月份的结余为基。
 
 ## 关键设计决策
 
@@ -110,5 +126,10 @@
 | sourceTravelIds | array | 关联出差记录 ID |
 | sourceMissIds | array | 关联漏打卡记录 ID |
 | sourceOvertimeIds | array | 关联加班记录 ID (v2.0) |
+| missTime | string | 漏打卡说明时段（首条漏打卡记录的 missTime） |
+| period | string | 打卡时段（首条打卡记录） |
+| scheduleStart / scheduleEnd | string | 上/下班时间（取考勤配置） |
 
-4. **结余月份键**：使用 `prevMonthKey = targetMonth - 2个月` 而非上个月，因为当前月的结果尚未写入 carry_over 表，需跳过一个月的 gap。
+## 结余月份键
+
+使用 `prevMonthKey = targetMonth - 2个月` 而非上个月，因为当前月的结果尚未写入 carry_over 表，需跳过一个月的 gap。

@@ -543,7 +543,7 @@ pending_review ──确认──► confirmed ──部门/人事提交──�
 
 空结果提示（`AttendanceView.vue`）：
 
-- `configChanged`：仅当本月**已有计算结果**且 `config_updated_at` 新于 `last_calc_<month>`，或 `rules_version` ≠ `RULES_VERSION`（当前 `1.0.28`）时亮「规则已变更」。
+- `configChanged`：仅当本月**已有计算结果**且 `config_updated_at` 新于 `last_calc_<month>`，或 `rules_version` ≠ `RULES_VERSION`（当前 `1.0.30`）时亮「规则已变更」。
 - `noResults`：无结果但该月有打卡 → 「尚未计算」。空表不写「请先导入」。
 - `tableEmptyHint`：`noResults` 时传空串，隐藏表格内第二道提示，避免双红条。
 

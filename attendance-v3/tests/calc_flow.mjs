@@ -23,6 +23,21 @@ const PUNCH = [
     period: '正常班', signIn: '08:35', signOut: '17:30', overtimeHours: 0 },
   { employeeNo: 'E001', name: '张三', department: '技术部', date: '2026-08-12',
     period: '正常班', signIn: '08:30', signOut: '19:30', overtimeHours: 3 },
+  // 短假豁免：8-13 迟到 56min，代请假 1h（subject 王五）→ 正常
+  { employeeNo: 'E002', name: '王五', department: '技术部', date: '2026-08-13',
+    period: '正常班', signIn: '09:26', signOut: '17:30', overtimeHours: 0 },
+  // 漏打卡时段匹配：8-18 缺上午打卡，漏打卡说明「上午」→ 正常
+  { employeeNo: 'E002', name: '王五', department: '技术部', date: '2026-08-18',
+    period: '正常班', signIn: '', signOut: '17:30', overtimeHours: 0 },
+  // 漏打卡时段不匹配：8-19 缺上午打卡，漏打卡说明「下午」→ 旷工
+  { employeeNo: 'E002', name: '王五', department: '技术部', date: '2026-08-19',
+    period: '正常班', signIn: '', signOut: '17:30', overtimeHours: 0 },
+  // 漏打卡具体时间：8-20 缺上午打卡，漏打卡说明 09:00 → 覆盖上午 → 正常
+  { employeeNo: 'E002', name: '王五', department: '技术部', date: '2026-08-20',
+    period: '正常班', signIn: '', signOut: '17:30', overtimeHours: 0 },
+  // 短假不足抵扣：8-21 迟到 86min，请假 30min → 迟到 56min 异常（超出容错 30min）
+  { employeeNo: 'E002', name: '王五', department: '技术部', date: '2026-08-21',
+    period: '正常班', signIn: '09:56', signOut: '17:30', overtimeHours: 0 },
 ];
 
 const LEAVES = [
@@ -33,6 +48,21 @@ const LEAVES = [
   { applicant: '李四', department: '技术部', leaveType: '年假',
     startDate: '2026-08-17', endDate: '2026-08-17', leaveDays: 1, leaveHours: 0, reason: '',
     isSelf: '非本人', subject: '张三' },
+  { applicant: '李四', department: '技术部', leaveType: '事假',
+    startDate: '2026-08-13', endDate: '2026-08-13', leaveDays: 0, leaveHours: 1, reason: '',
+    isSelf: '非本人', subject: '王五' },
+  { applicant: '李四', department: '技术部', leaveType: '事假',
+    startDate: '2026-08-21', endDate: '2026-08-21', leaveDays: 0, leaveHours: 0.5, reason: '',
+    isSelf: '非本人', subject: '王五' },
+];
+
+const MISS_PUNCH = [
+  { applicant: '王五', department: '技术部', missDate: '2026-08-18', missPerson: '王五',
+    missTime: '上午', cardTime: '', reason: '', isSelf: '本人', subject: '王五' },
+  { applicant: '王五', department: '技术部', missDate: '2026-08-19', missPerson: '王五',
+    missTime: '下午', cardTime: '', reason: '', isSelf: '本人', subject: '王五' },
+  { applicant: '王五', department: '技术部', missDate: '2026-08-20', missPerson: '王五',
+    missTime: '09:00', cardTime: '', reason: '', isSelf: '本人', subject: '王五' },
 ];
 
 const SCHEDULES = [
@@ -82,7 +112,7 @@ globalThis.fetch = (input, init) => {
       punch_records: PUNCH,
       leave_records: LEAVES,
       travel_records: [],
-      miss_punch_records: [],
+      miss_punch_records: MISS_PUNCH,
       overtime_records: [],
       schedules: SCHEDULES,
       carry_over: [],
@@ -96,11 +126,11 @@ globalThis.fetch = (input, init) => {
 const { RulesEngine } = await import(BUNDLE);
 
 const results = await RulesEngine.calculateMonth('2026-08');
-assert.strictEqual(results.length, 31, 'should generate 31 day rows');
+assert.strictEqual(results.length, 62, 'should generate 31 day rows per employee (E001 + E002)');
 
-function rowFor(date) {
-  const r = results.find(x => x.date === date);
-  assert.ok(r, 'no result for ' + date);
+function rowFor(date, employeeNo = 'E001') {
+  const r = results.find(x => x.date === date && x.employeeNo === employeeNo);
+  assert.ok(r, 'no result for ' + employeeNo + ' ' + date);
   return r;
 }
 
@@ -128,7 +158,32 @@ const otDay = rowFor('2026-08-12');
 assert.strictEqual(otDay.status, 'normal');
 assert.strictEqual(otDay.overtimeHours, 3);
 
-// 4. 结余：加班 3h - 调休 1h = 2h
+// 4. 短假豁免：8-13 代请假 1h（subject 王五）覆盖迟到 56min → 正常
+const shortLeaveDay = rowFor('2026-08-13', 'E002');
+assert.strictEqual(shortLeaveDay.status, 'normal', '1h proxy leave should waive 56min late');
+assert.strictEqual(shortLeaveDay.lateMinutes, 0);
+assert.strictEqual(shortLeaveDay.leaveType, '事假');
+assert.strictEqual(shortLeaveDay.leaveHours, 1);
+
+// 5. 短假不足抵扣：8-21 迟到 86min - 请假 30min = 56min（超出容错，异常保留）
+const partialLeaveDay = rowFor('2026-08-21', 'E002');
+assert.strictEqual(partialLeaveDay.status, 'abnormal', '30min leave cannot cover 86min late');
+assert.strictEqual(partialLeaveDay.lateMinutes, 56);
+
+// 6. 漏打卡时段匹配：缺上午打卡 + 说明「上午」→ 正常
+const missAmDay = rowFor('2026-08-18', 'E002');
+assert.strictEqual(missAmDay.status, 'normal', 'miss-punch note covers missing AM');
+assert.strictEqual(missAmDay.signIn, '');
+
+// 7. 漏打卡时段不匹配：缺上午打卡 + 说明「下午」→ 旷工
+const missPmNoteDay = rowFor('2026-08-19', 'E002');
+assert.strictEqual(missPmNoteDay.absent, true, 'PM note cannot cover missing AM');
+
+// 8. 漏打卡具体时间 09:00 → 覆盖上午 → 正常
+const missTimeDay = rowFor('2026-08-20', 'E002');
+assert.strictEqual(missTimeDay.status, 'normal', '09:00 note covers missing AM');
+
+// 9. 结余：加班 3h - 调休 1h = 2h
 assert.ok(captured.calc, 'should POST /attendance/calculate');
 const e001Carry = captured.calc.carry_over.find(c => c.employeeNo === 'E001');
 assert.ok(e001Carry, 'carry_over should include E001');

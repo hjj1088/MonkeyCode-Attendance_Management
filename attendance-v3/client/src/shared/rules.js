@@ -4,7 +4,7 @@
 import Store from './store';
 import { apiRequest } from './api';
 
-export const RULES_VERSION = '1.0.29';
+export const RULES_VERSION = '1.0.30';
 
 export const RulesEngine = {
   async getConfig() {
@@ -46,6 +46,20 @@ export const RulesEngine = {
       if (!start) return false;
       return dateStr >= start && dateStr <= end;
     });
+  },
+
+  _missCoversPeriod(m, period) {
+    const t = String(m.missTime || '').trim();
+    if (!t) return true;
+    const isAm = /上午|早上|早晨|晨/.test(t);
+    const isPm = /下午|中午|傍晚|晚/.test(t);
+    if (isAm || isPm) return period === 'am' ? isAm : isPm;
+    const timeMatch = t.match(/(\d{1,2}):(\d{2})/);
+    if (timeMatch) {
+      const minutes = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]);
+      return period === 'am' ? minutes <= 12 * 60 : minutes > 12 * 60;
+    }
+    return true;
   },
 
   _timeToMinutes(timeStr) {
@@ -240,6 +254,18 @@ export const RulesEngine = {
           if (!hasRealPunch || leaveRecord.leaveDays >= 1) {
             status = 'leave';
           }
+          const leaveMinutes = leaveHours * 60;
+          if (isWorkDay && status === 'leave') {
+            adjustedLateMinutes = 0;
+            adjustedEarlyMinutes = 0;
+          } else if (isWorkDay && leaveMinutes > 0) {
+            if (adjustedLateMinutes > 0) {
+              adjustedLateMinutes = adjustedLateMinutes <= leaveMinutes ? 0 : adjustedLateMinutes - leaveMinutes;
+            }
+            if (adjustedEarlyMinutes > 0) {
+              adjustedEarlyMinutes = adjustedEarlyMinutes <= leaveMinutes ? 0 : adjustedEarlyMinutes - leaveMinutes;
+            }
+          }
         }
 
         if (travelRecord) {
@@ -256,13 +282,20 @@ export const RulesEngine = {
           absent = true;
         }
 
-        if (isWorkDay && hasRealPunch && (!firstSignIn || !lastSignOut) && !leaveRecord && !travelRecord && !missRecord) {
-          status = 'absent';
-          absent = true;
+        if (isWorkDay && hasRealPunch && (!firstSignIn || !lastSignOut) && !leaveRecord && !travelRecord) {
+          const needAm = !firstSignIn;
+          const needPm = !lastSignOut;
+          const covered = dayMissRecords.some(m =>
+            (needAm && this._missCoversPeriod(m, 'am')) || (needPm && this._missCoversPeriod(m, 'pm'))
+          );
+          if (!covered) {
+            status = 'absent';
+            absent = true;
+          }
         }
 
-        if (totalLate > 0 && hasRealPunch && isWorkDay && status !== 'leave' && status !== 'travel' && status !== 'absent') {
-          lateRecords.push({ date: dateStr, minutes: totalLate });
+        if (adjustedLateMinutes > 0 && hasRealPunch && isWorkDay && status !== 'leave' && status !== 'travel' && status !== 'absent') {
+          lateRecords.push({ date: dateStr, minutes: adjustedLateMinutes });
           status = 'abnormal';
         }
 
