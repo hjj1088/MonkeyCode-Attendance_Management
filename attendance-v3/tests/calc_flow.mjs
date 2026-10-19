@@ -54,6 +54,10 @@ const LEAVES = [
   { applicant: '李四', department: '技术部', leaveType: '事假',
     startDate: '2026-08-21', endDate: '2026-08-21', leaveDays: 0, leaveHours: 0.5, reason: '',
     isSelf: '非本人', subject: '王五' },
+  // 连续 2 天调休 16h：分摊后每天 8h（修复前每天全量 16h、结余多扣）
+  { applicant: '王五', department: '技术部', leaveType: '调休',
+    startDate: '2026-08-25', endDate: '2026-08-26', leaveDays: 2, leaveHours: 16, reason: '',
+    isSelf: '本人', subject: '王五' },
 ];
 
 const MISS_PUNCH = [
@@ -183,11 +187,22 @@ assert.strictEqual(missPmNoteDay.absent, true, 'PM note cannot cover missing AM'
 const missTimeDay = rowFor('2026-08-20', 'E002');
 assert.strictEqual(missTimeDay.status, 'normal', '09:00 note covers missing AM');
 
-// 9. 结余：加班 3h - 调休 1h = 2h
-assert.ok(captured.calc, 'should POST /attendance/calculate');
+// 9. 连续 2 天调休 16h → 每天分摊 8h（修复前每天全量 16h）
+const split1 = rowFor('2026-08-25', 'E002');
+const split2 = rowFor('2026-08-26', 'E002');
+assert.strictEqual(split1.status, 'leave');
+assert.strictEqual(split2.status, 'leave');
+assert.strictEqual(split1.leaveHours, 8, 'multi-day leave should split per day');
+assert.strictEqual(split2.leaveHours, 8);
+assert.strictEqual(split1.leaveHours + split2.leaveHours, 16, 'split total equals record total');
+
+// 10. 结余：E001 加班 3h - 调休 1h = 2h；E002 无加班 - 调休 16h → 0（不为负，且不因多日重复扣减而异常）
 const e001Carry = captured.calc.carry_over.find(c => c.employeeNo === 'E001');
 assert.ok(e001Carry, 'carry_over should include E001');
 assert.strictEqual(e001Carry.overtimeBalance, 2, 'balance = 3 - 1');
+const e002Carry = captured.calc.carry_over.find(c => c.employeeNo === 'E002');
+assert.ok(e002Carry, 'carry_over should include E002');
+assert.strictEqual(e002Carry.overtimeBalance, 0, 'balance floors at 0');
 
 // 5. Store 往返是常数：禁止按人串行 getByIndex
 assert.ok(captured.fetches.length <= 12, 'store roundtrips should be O(1), got ' + captured.fetches.length);

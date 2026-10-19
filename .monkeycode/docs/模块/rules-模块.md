@@ -4,7 +4,7 @@
 
 ## RULES_VERSION 常量 (v1.0.26)
 
-`const RULES_VERSION = '1.0.30'`，定义于 rules.js 顶部。版本号随每次规则逻辑变更递增。
+`const RULES_VERSION = '1.0.31'`，定义于 rules.js 顶部。版本号随每次规则逻辑变更递增。
 
 **用途**：考勤页 `loadResults()` 读取该版本号，与 `settings` 表中存储的 `rules_version` 比对。若不一致，说明规则代码已更新，将自动触发重新计算而非使用陈旧的缓存结果。
 
@@ -59,6 +59,10 @@
 - `missTime` 含「上午/早上/早晨/晨」→ 覆盖 am；含「下午/中午/傍晚/晚」→ 覆盖 pm
 - `missTime` 为具体时间（`HH:MM`）→ ≤12:00 覆盖 am，>12:00 覆盖 pm
 - `missTime` 为空或无法识别 → 按全天覆盖
+
+### `_leaveHoursForDay(l)` (v1.0.31)
+
+请假记录单日分摊：跨 N 天记录每天计 `total / N`（`total = leaveHours || leaveDays * 8`，保留 2 位小数）；单天记录保持原值。用于 `leaveHours` 累加与调休当日扣减，保证两天合计等于记录总时长、结余扣减不翻倍。
 
 ### `calculateMonth(targetMonth)` - 核心流程
 

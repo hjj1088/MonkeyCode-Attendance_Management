@@ -4,7 +4,7 @@
 import Store from './store';
 import { apiRequest } from './api';
 
-export const RULES_VERSION = '1.0.30';
+export const RULES_VERSION = '1.0.31';
 
 export const RulesEngine = {
   async getConfig() {
@@ -60,6 +60,17 @@ export const RulesEngine = {
       return period === 'am' ? minutes <= 12 * 60 : minutes > 12 * 60;
     }
     return true;
+  },
+
+  _leaveHoursForDay(l) {
+    // 请假记录总时长分摊到单日：跨 N 天的记录每天计 total/N，单天记录保持原值
+    const total = l.leaveHours || (l.leaveDays * 8) || 0;
+    const start = l.startDate || '';
+    const end = l.endDate || start;
+    if (!start || !end || end <= start) return total;
+    const span = Math.round((new Date(end) - new Date(start)) / 86400000) + 1;
+    if (span <= 1) return total;
+    return Math.round((total / span) * 100) / 100;
   },
 
   _timeToMinutes(timeStr) {
@@ -246,9 +257,10 @@ export const RulesEngine = {
         if (leaveRecord) {
           leaveType = leaveRecord.leaveType;
           for (const l of dayLeaveRecords) {
-            leaveHours += l.leaveHours || (l.leaveDays * 8) || 0;
+            const dayHours = this._leaveHoursForDay(l);
+            leaveHours += dayHours;
             if (l.leaveType && l.leaveType.includes('调休')) {
-              adjustedOvertime -= l.leaveHours || 0;
+              adjustedOvertime -= dayHours;
             }
           }
           if (!hasRealPunch || leaveRecord.leaveDays >= 1) {
