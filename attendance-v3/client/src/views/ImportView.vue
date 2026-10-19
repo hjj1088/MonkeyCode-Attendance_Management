@@ -248,7 +248,7 @@ async function importAll() {
         if (res.skipped) {
           importLog.value.unshift({ time: new Date().toLocaleTimeString(), file: f.fileName, type: f.fileType, count: 0, action: 'skip', msg: '已存在，跳过' });
         } else {
-          importLog.value.unshift({ time: new Date().toLocaleTimeString(), file: f.fileName, type: f.fileType, count: res.imported, action: 'ok', msg: '导入 ' + res.imported + ' 条' });
+          importLog.value.unshift({ time: new Date().toLocaleTimeString(), file: f.fileName, type: f.fileType, count: res.imported, action: 'ok', msg: '导入 ' + res.imported + ' 条' + (res.duplicates ? '，跳过重复 ' + res.duplicates + ' 条' : '') });
         }
       } catch (innerErr) {
         f.error = innerErr.message;

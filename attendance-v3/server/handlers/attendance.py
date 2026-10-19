@@ -58,6 +58,9 @@ TABLE_COLUMNS = {
     ],
 }
 
+# OA 记录按全业务字段去重的表（punch 导入前全清、schedule 全删重建，均无需查重）
+DEDUP_TABLES = {'leave_records', 'overtime_records', 'travel_records', 'miss_punch_records'}
+
 
 def _to_str(v):
     if v is None or v == '':
@@ -167,6 +170,7 @@ def handle_import(handler):
             return
 
         imported = 0
+        duplicates = 0
         errors = []
         for rec in records:
             values = []
@@ -177,6 +181,17 @@ def handle_import(handler):
                 elif not isinstance(val, str):
                     val = str(val)
                 values.append(val)
+
+            if table in DEDUP_TABLES:
+                # 列名来自白名单 TABLE_COLUMNS，无注入风险
+                where = ' AND '.join('{} = ?'.format(c) for c in columns)
+                dup = conn.execute(
+                    'SELECT id FROM {} WHERE {} LIMIT 1'.format(table, where),
+                    values
+                ).fetchone()
+                if dup:
+                    duplicates += 1
+                    continue
 
             placeholders = ', '.join(['?'] * len(columns))
             cols_str = ', '.join(columns)
@@ -208,7 +223,7 @@ def handle_import(handler):
             (file_name, file_type, imported)
         )
         conn.commit()
-        handler._send_json(0, data={'message': '导入成功', 'imported': imported, 'total': len(records), 'type': file_type, 'errors': errors})
+        handler._send_json(0, data={'message': '导入成功', 'imported': imported, 'total': len(records), 'duplicates': duplicates, 'type': file_type, 'errors': errors})
     except Exception as e:
         import traceback
         traceback.print_exc()

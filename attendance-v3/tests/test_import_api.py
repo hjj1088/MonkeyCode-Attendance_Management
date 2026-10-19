@@ -154,3 +154,77 @@ def test_import_unknown_type_rejected(e2e_server):
                                    {'type': 'bogus', 'records': [], 'file_name': 'x.xlsx'},
                                    token=e2e_server.admin_token)
     assert status == 400
+
+
+def test_import_leave_record_dedup_across_filenames(e2e_server):
+    """换文件名重复上传同内容请假记录 → 记录级去重，不重复入库"""
+    client = e2e_server
+    leave = [{'applicant': '王五', 'department': '技术部',
+              'leaveType': '公休', 'startDate': '2026-07-06',
+              'endDate': '2026-07-06', 'leaveDays': 0,
+              'leaveHours': 1, 'reason': '', 'isSelf': '本人', 'subject': '王五'}]
+
+    status, body = client.call('POST', '/api/attendance/import',
+                               {'type': 'leave', 'records': leave, 'file_name': 'dup1.xlsx'},
+                               token=client.admin_token)
+    assert body['data']['imported'] == 1
+
+    # 不同文件名、相同记录 → 记录级去重生效
+    status, body = client.call('POST', '/api/attendance/import',
+                               {'type': 'leave', 'records': leave, 'file_name': 'dup2.xlsx'},
+                               token=client.admin_token)
+    assert body['data']['imported'] == 0
+    assert body['data']['duplicates'] == 1
+
+    # 同文件再传 → 文件级去重（skipped）
+    status, body = client.call('POST', '/api/attendance/import',
+                               {'type': 'leave', 'records': leave, 'file_name': 'dup1.xlsx'},
+                               token=client.admin_token)
+    assert body['data']['skipped'] is True
+
+    status, body = client.call('GET', '/api/store/leave_records', token=client.admin_token)
+    wangwu = [r for r in body['data'] if r['applicant'] == '王五']
+    assert len(wangwu) == 1
+
+
+def test_import_miss_punch_record_dedup(e2e_server):
+    client = e2e_server
+    miss = [{'applicant': '赵六', 'department': '技术部', 'missDate': '2026-07-07',
+             'missPerson': '赵六', 'missTime': '上午', 'cardTime': '',
+             'reason': '忘打卡', 'isSelf': '本人', 'subject': '赵六'}]
+
+    status, body = client.call('POST', '/api/attendance/import',
+                               {'type': 'miss_punch', 'records': miss, 'file_name': 'm1.xlsx'},
+                               token=client.admin_token)
+    assert body['data']['imported'] == 1
+
+    status, body = client.call('POST', '/api/attendance/import',
+                               {'type': 'miss_punch', 'records': miss, 'file_name': 'm2.xlsx'},
+                               token=client.admin_token)
+    assert body['data']['imported'] == 0
+    assert body['data']['duplicates'] == 1
+
+    status, body = client.call('GET', '/api/store/miss_punch_records', token=client.admin_token)
+    zhaoliu = [r for r in body['data'] if r['applicant'] == '赵六']
+    assert len(zhaoliu) == 1
+
+
+def test_import_same_day_different_leave_both_kept(e2e_server):
+    """同一天两条不同时长的请假（上午/下午各 1h）→ 均保留，不误杀"""
+    client = e2e_server
+    records = [
+        {'applicant': '孙七', 'department': '技术部', 'leaveType': '事假',
+         'startDate': '2026-07-08', 'endDate': '2026-07-08', 'leaveDays': 0,
+         'leaveHours': 1, 'reason': '上午', 'isSelf': '本人', 'subject': '孙七'},
+        {'applicant': '孙七', 'department': '技术部', 'leaveType': '事假',
+         'startDate': '2026-07-08', 'endDate': '2026-07-08', 'leaveDays': 0,
+         'leaveHours': 1, 'reason': '下午', 'isSelf': '本人', 'subject': '孙七'},
+    ]
+    status, body = client.call('POST', '/api/attendance/import',
+                               {'type': 'leave', 'records': records, 'file_name': 'sun7.xlsx'},
+                               token=client.admin_token)
+    assert body['data']['imported'] == 2
+
+    status, body = client.call('GET', '/api/store/leave_records', token=client.admin_token)
+    sunqi = [r for r in body['data'] if r['applicant'] == '孙七']
+    assert len(sunqi) == 2
