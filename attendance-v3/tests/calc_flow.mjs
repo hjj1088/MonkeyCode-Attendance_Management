@@ -58,6 +58,13 @@ const LEAVES = [
   { applicant: '王五', department: '技术部', leaveType: '调休',
     startDate: '2026-08-25', endDate: '2026-08-26', leaveDays: 2, leaveHours: 16, reason: '',
     isSelf: '本人', subject: '王五' },
+  // 同天两种请假：8-27 公休 2.5h + 调休 4h → leaveDetails 两行
+  { applicant: '王五', department: '技术部', leaveType: '公休',
+    startDate: '2026-08-27', endDate: '2026-08-27', leaveDays: 0, leaveHours: 2.5, reason: '',
+    isSelf: '本人', subject: '王五' },
+  { applicant: '王五', department: '技术部', leaveType: '调休',
+    startDate: '2026-08-27', endDate: '2026-08-27', leaveDays: 0, leaveHours: 4, reason: '',
+    isSelf: '本人', subject: '王五' },
 ];
 
 const MISS_PUNCH = [
@@ -196,7 +203,17 @@ assert.strictEqual(split1.leaveHours, 8, 'multi-day leave should split per day')
 assert.strictEqual(split2.leaveHours, 8);
 assert.strictEqual(split1.leaveHours + split2.leaveHours, 16, 'split total equals record total');
 
-// 10. 结余：E001 加班 3h - 调休 1h = 2h；E002 无加班 - 调休 16h → 0（不为负，且不因多日重复扣减而异常）
+// 10. 同天两种请假：leaveType 拼接、leaveDetails 两行、合计 6.5h、调休当天扣减
+const mixedDay = rowFor('2026-08-27', 'E002');
+assert.strictEqual(mixedDay.status, 'leave');
+assert.strictEqual(mixedDay.leaveType, '公休、调休', 'two leave types joined');
+assert.strictEqual(mixedDay.leaveHours, 6.5);
+assert.deepStrictEqual(mixedDay.leaveDetails, [
+  { type: '公休', hours: 2.5 },
+  { type: '调休', hours: 4 },
+]);
+
+// 11. 结余：E001 加班 3h - 调休 1h = 2h；E002 无加班 - 调休(8+8+4)h → 0（不为负，且不因多日重复扣减而异常）
 const e001Carry = captured.calc.carry_over.find(c => c.employeeNo === 'E001');
 assert.ok(e001Carry, 'carry_over should include E001');
 assert.strictEqual(e001Carry.overtimeBalance, 2, 'balance = 3 - 1');

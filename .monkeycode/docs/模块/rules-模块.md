@@ -122,7 +122,8 @@
 | workHours | number | 实际工作时长 (v2.0) |
 | absent | boolean | 是否旷工 |
 | status | string | 考勤状态 |
-| leaveType | string | 请假类型 |
+| leaveType | string | 请假类型（多种时去重用「、」拼接，如「公休、调休」） |
+| leaveDetails | array (v1.0.32) | 同天多条请假的分行明细 `[{type, hours}]`，hours 为当天分摊值 |
 | isRestDay | boolean | 是否休息日 |
 | month | string | 月份 |
 | sourcePunchIds | array | 关联打卡记录 ID |

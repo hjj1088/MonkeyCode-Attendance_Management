@@ -367,7 +367,7 @@ def handle_attendance_calculate(handler):
         'employeeNo', 'name', 'department', 'date', 'month', 'status',
         'signIn', 'signOut', 'lateMinutes', 'earlyMinutes',
         'overtimeHours', 'travelHours', 'workHours', 'leaveType',
-        'absent', 'leaveHours', 'isRestDay', 'period',
+        'absent', 'leaveHours', 'leaveDetails', 'isRestDay', 'period',
         'scheduleStart', 'scheduleEnd', 'missTime',
         'sourcePunchIds', 'sourceLeaveIds', 'sourceTravelIds',
         'sourceMissIds', 'sourceOvertimeIds',
@@ -375,7 +375,7 @@ def handle_attendance_calculate(handler):
 
     json_cols = {
         'sourcePunchIds', 'sourceLeaveIds', 'sourceTravelIds',
-        'sourceMissIds', 'sourceOvertimeIds',
+        'sourceMissIds', 'sourceOvertimeIds', 'leaveDetails',
     }
 
     for r in results:

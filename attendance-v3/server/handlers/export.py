@@ -250,18 +250,37 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
     def use_field(name):
         return not fields or name in field_set
 
+    def _leave_lines(r):
+        """同天多种请假拆为多行：公休 2.5h / 调休 4h；旧结果回退单行 leaveType/leaveHours"""
+        details = r.get('leaveDetails')
+        if isinstance(details, str):
+            try:
+                details = json.loads(details)
+            except (json.JSONDecodeError, TypeError):
+                details = None
+        if isinstance(details, list) and details:
+            lines = []
+            for d in details:
+                seg = d.get('type', '请假') if isinstance(d, dict) else str(d)
+                hours = d.get('hours') if isinstance(d, dict) else None
+                if use_field('leaveHours') and hours is not None:
+                    seg += ' ' + str(hours) + 'h'
+                lines.append(seg)
+            return '\n'.join(lines)
+        parts = []
+        if use_field('leaveType') and r.get('leaveType'):
+            parts.append(r['leaveType'])
+        if use_field('leaveHours') and r.get('leaveHours') is not None:
+            parts.append(str(r['leaveHours']) + 'h')
+        return '/'.join(parts) if parts else '请假'
+
     def build_am_cell(r):
         if not r:
             return ''
         if r.get('status') == 'rest':
             return ''
         if r.get('status') == 'leave' or r.get('leaveType'):
-            parts = []
-            if use_field('leaveType') and r.get('leaveType'):
-                parts.append(r['leaveType'])
-            if use_field('leaveHours') and r.get('leaveHours') is not None:
-                parts.append(str(r['leaveHours']) + 'h')
-            return '/'.join(parts) if parts else '请假'
+            return _leave_lines(r)
         if use_field('signIn') and r.get('signIn'):
             return r['signIn']
         if r.get('sourceTravelIds') and r.get('travelHours'):
@@ -282,12 +301,7 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
         if r.get('status') == 'rest':
             return ''
         if r.get('status') == 'leave' or r.get('leaveType'):
-            parts = []
-            if use_field('leaveType') and r.get('leaveType'):
-                parts.append(r['leaveType'])
-            if use_field('leaveHours') and r.get('leaveHours') is not None:
-                parts.append(str(r['leaveHours']) + 'h')
-            return '/'.join(parts) if parts else '请假'
+            return _leave_lines(r)
         if use_field('signOut') and r.get('signOut'):
             return r['signOut']
         if r.get('sourceTravelIds') and r.get('travelHours'):
@@ -407,6 +421,8 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
                 cell = ws.cell(row=row_am, column=col)
                 cell.border = THIN_BORDER
                 _write_cell_value(cell, am_val)
+                if '\n' in str(am_val):
+                    cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
                 font, fill = _get_cell_style(am_val)
                 if font:
@@ -439,6 +455,8 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
                 cell = ws.cell(row=row_pm, column=col)
                 cell.border = THIN_BORDER
                 _write_cell_value(cell, pm_val)
+                if '\n' in str(pm_val):
+                    cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
                 font, fill = _get_cell_style(pm_val)
                 if font:

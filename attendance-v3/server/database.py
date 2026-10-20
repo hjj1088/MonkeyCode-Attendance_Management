@@ -140,6 +140,7 @@ def init_db():
             absent INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT '',
             leaveType TEXT NOT NULL DEFAULT '',
+            leaveDetails TEXT NOT NULL DEFAULT '[]',
             isRestDay INTEGER NOT NULL DEFAULT 0,
             month TEXT NOT NULL DEFAULT '',
             sourcePunchIds TEXT NOT NULL DEFAULT '[]',
@@ -322,6 +323,8 @@ def _migrate(conn):
         return
     if 'missTime' not in results_cols:
         conn.execute("ALTER TABLE attendance_results ADD COLUMN missTime TEXT NOT NULL DEFAULT ''")
+    if 'leaveDetails' not in results_cols:
+        conn.execute("ALTER TABLE attendance_results ADD COLUMN leaveDetails TEXT NOT NULL DEFAULT '[]'")
     for col in ('review_status', 'reviewed_by', 'reviewed_at'):
         if col not in results_cols:
             default = "'pending_review'" if col == 'review_status' else "''"

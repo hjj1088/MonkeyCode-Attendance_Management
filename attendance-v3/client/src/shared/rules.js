@@ -4,7 +4,7 @@
 import Store from './store';
 import { apiRequest } from './api';
 
-export const RULES_VERSION = '1.0.31';
+export const RULES_VERSION = '1.0.32';
 
 export const RulesEngine = {
   async getConfig() {
@@ -217,6 +217,7 @@ export const RulesEngine = {
         let adjustedOvertime = totalOvertime;
         let leaveType = '';
         let leaveHours = 0;
+        let leaveDetails = [];
         let travelHours = 0;
         let isRestDay = false;
 
@@ -255,10 +256,11 @@ export const RulesEngine = {
         }
 
         if (leaveRecord) {
-          leaveType = leaveRecord.leaveType;
+          leaveType = [...new Set(dayLeaveRecords.map(l => l.leaveType).filter(Boolean))].join('、');
           for (const l of dayLeaveRecords) {
             const dayHours = this._leaveHoursForDay(l);
             leaveHours += dayHours;
+            leaveDetails.push({ type: l.leaveType || '请假', hours: dayHours });
             if (l.leaveType && l.leaveType.includes('调休')) {
               adjustedOvertime -= dayHours;
             }
@@ -337,6 +339,7 @@ export const RulesEngine = {
           absent,
           status,
           leaveType,
+          leaveDetails,
           isRestDay,
           month: targetMonth,
           sourcePunchIds: dayPunches.map(p => p.id).filter(Boolean),

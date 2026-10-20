@@ -10,7 +10,10 @@
         <template v-if="cell.record && cell.record.status !== 'rest'">
           <span class="cal-time-line cal-signin"><span class="cal-time-label">上班</span><span class="cal-time">{{ cell.record.signIn || '--' }}</span></span>
           <span class="cal-time-line cal-signout"><span class="cal-time-label">下班</span><span class="cal-time">{{ cell.record.signOut || '--' }}</span></span>
-          <span class="cal-badge" :class="statusBadgeClass(cell.record.status) || 'cal-badge-rest'">{{ statusWithTime(cell.record) }}</span>
+          <span v-if="cell.record.status === 'leave'" class="cal-badge" :class="statusBadgeClass(cell.record.status) || 'cal-badge-rest'">
+            <span v-for="(line, i) in leaveLines(cell.record)" :key="i" class="cal-leave-line">{{ line }}</span>
+          </span>
+          <span v-else class="cal-badge" :class="statusBadgeClass(cell.record.status) || 'cal-badge-rest'">{{ statusWithTime(cell.record) }}</span>
         </template>
         <template v-else-if="cell.record">
           <span class="cal-badge cal-badge-full" :class="statusBadgeClass(cell.record.status) || 'cal-badge-rest'">{{ statusWithTime(cell.record) }}</span>
@@ -37,6 +40,12 @@ function statusWithTime(r) {
   if (r.status === 'abnormal' && r.lateMinutes) return label + formatMinutes(r.lateMinutes);
   if (r.status === 'leave' && r.leaveHours) return label + (Math.round(r.leaveHours * 10) / 10) + 'h';
   return label;
+}
+
+function leaveLines(r) {
+  const details = Array.isArray(r.leaveDetails) ? r.leaveDetails : [];
+  if (!details.length) return [statusWithTime(r)];
+  return details.map(d => (d.type || '请假') + ' ' + (Math.round((d.hours || 0) * 10) / 10) + 'h');
 }
 
 defineProps({
@@ -86,6 +95,7 @@ defineEmits(['show-detail']);
 .cal-time-label { font-size: 12px; color: var(--ink-secondary); }
 .cal-time { font-size: 18px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 .cal-badge { grid-row: 2 / 4; grid-column: 2; align-self: center; justify-self: center; font-size: 14px; font-weight: 600; line-height: 1; padding: 4px 8px; border-radius: var(--radius-sm); white-space: nowrap; }
+.cal-leave-line { display: block; line-height: 1.4; }
 .cal-badge-full { grid-column: 1 / -1; grid-row: 2 / 4; justify-self: center; }
 .cal-badge-rest { background: var(--paper); color: var(--ink-muted); }
 .cal-badge-holiday { background: var(--vermillion-light); color: var(--vermillion); }

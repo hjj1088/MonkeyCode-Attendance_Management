@@ -26,7 +26,7 @@ def json_serialize(val):
         result = {}
         for k, v in val.items():
             if k in ('workDays', 'fields', 'sourcePunchIds', 'sourceLeaveIds',
-                     'sourceTravelIds', 'sourceMissIds', 'sourceOvertimeIds', 'value'):
+                     'sourceTravelIds', 'sourceMissIds', 'sourceOvertimeIds', 'leaveDetails', 'value'):
                 try:
                     result[k] = json.loads(v) if isinstance(v, str) else v
                 except (json.JSONDecodeError, TypeError):

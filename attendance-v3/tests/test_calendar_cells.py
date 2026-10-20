@@ -161,6 +161,28 @@ def test_travel_plus_leave_priority():
     assert pm == '调休/2h', f"'{pm}' != '调休/2h'"
 
 
+def test_multi_leave_details_split_lines():
+    """同天两种请假 → leaveDetails 拆多行（公休 2.5h + 调休 4h）"""
+    results = [
+        _make_result('001', '2026-02-02', status='leave', leaveType='公休、调休', leaveHours=6.5,
+                     leaveDetails=[{'type': '公休', 'hours': 2.5}, {'type': '调休', 'hours': 4}])
+    ]
+    am, pm = _get_cells(results)
+    assert am == '公休 2.5h\n调休 4h', f"'{am}' != '公休 2.5h\\n调休 4h'"
+    assert pm == '公休 2.5h\n调休 4h', f"'{pm}' != '公休 2.5h\\n调休 4h'"
+
+
+def test_single_leave_details_fallback():
+    """单条请假 → leaveDetails 单行（无换行符）"""
+    results = [
+        _make_result('001', '2026-02-02', status='leave', leaveType='年假', leaveHours=8,
+                     leaveDetails=[{'type': '年假', 'hours': 8}])
+    ]
+    am, pm = _get_cells(results)
+    assert am == '年假 8h', f"'{am}' != '年假 8h'"
+    assert '\n' not in am
+
+
 if __name__ == '__main__':
     import sys
     failures = 0
