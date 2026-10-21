@@ -96,7 +96,7 @@ CORS 预检：返回 `204 No Content`，允许 `POST, OPTIONS` 方法及 `Conten
 5. **休息日处理**：排班休息日或假期休息日整行填充 `GRAY_FILL`；在此之前先通过 `_get_cell_style()` 保留 OA 状态字体颜色（蓝色），然后再覆盖灰色填充
 6. **假期标注**：节假日日期在排班列显示假期名称（如"端午节"），替代默认"休息日"/"工作日"
 7. **作息时间**：V3.2 用 `_resolve_work_times()` 读请求参数或 `attendance_config`，不再用排班表逐日覆盖迟到/早退阈值
-8. **迟到/早退直接样式**：AM 签到、PM 签退与 `_st`/`_et` 分钟比较，异常则 `RED_FONT`。打卡由 `_write_cell_value()` 写成 Excel `datetime.time`
+8. **条件格式动态着色**（V3.3.1 修复）：签到/签退时间值无静态字体样式；迟到/早退颜色完全由全局 `FormulaRule` 条件格式动态判定，手工修改单元格值后颜色实时随规则更新。打卡由 `_write_cell_value()` 写成 Excel `datetime.time`
 9. **全局条件格式**（V3.2）：
    - 迟到：`AND(MOD(ROW(),2)=1,ISNUMBER(D3),D3>TIME(h,m,0))`
    - 早退：`AND(MOD(ROW(),2)=0,ISNUMBER(D3),D3<TIME(h,m,0))`
@@ -119,7 +119,7 @@ CORS 预检：返回 `204 No Content`，允许 `POST, OPTIONS` 方法及 `Conten
    'no_sign_in' → '上班未打卡', 'no_sign_out' → '下班未打卡'
    ```
 4. 通过 `_get_cell_style()` 为异常状态单元格着色
-5. 签到/签退列写入 Excel 时间值；`_time_to_minutes()` 比较后迟到/早退 `RED_FONT`；按列挂 `AND(ISNUMBER(cell),cell>TIME(...))` / `cell<TIME(...)`
+5. 签到/签退列写入 Excel 时间值；时间值无静态红字，迟到/早退颜色由按列挂的 `AND(ISNUMBER(cell),cell>TIME(...))` / `cell<TIME(...)` 条件格式动态判定（V3.3.1 修复：删除静态 `RED_FONT` 双写）
 6. 列宽自适应，上限 40
 
 ### _get_cell_style(val)

@@ -179,12 +179,8 @@ def build_flat_report(records, template, filename, startTime=None, endTime=None)
             if fill:
                 cell.fill = fill
 
-            if field_name == 'signIn' and _is_time_val(val):
-                if _time_to_minutes(val) > _time_to_minutes(_st):
-                    cell.font = RED_FONT
-            elif field_name == 'signOut' and _is_time_val(val):
-                if _time_to_minutes(val) < _time_to_minutes(_et):
-                    cell.font = RED_FONT
+            # 迟到/早退的字体颜色由下方 FormulaRule 条件格式动态判定，
+            # 导出时不写静态红字，避免手工改值后颜色不随规则更新
 
     sh = None; sm = None; eh = None; em = None
     if _st and _et and _is_time_val(_st) and _is_time_val(_et):
@@ -431,11 +427,6 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
                     cell.fill = fill
                 if is_rest:
                     cell.fill = GRAY_FILL
-                elif am_val and _is_time_val(am_val):
-                    ami = _time_to_minutes(am_val)
-                    sti = _time_to_minutes(_st)
-                    if ami is not None and sti is not None and ami > sti:
-                        cell.font = RED_FONT
                 col += 1
 
         row_pm = current_row + 1
@@ -465,11 +456,6 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
                     cell.fill = fill
                 if is_rest:
                     cell.fill = GRAY_FILL
-                elif pm_val and _is_time_val(pm_val):
-                    pmi = _time_to_minutes(pm_val)
-                    edi = _time_to_minutes(_et)
-                    if pmi is not None and edi is not None and pmi < edi:
-                        cell.font = RED_FONT
                 col += 1
 
         current_row += 2

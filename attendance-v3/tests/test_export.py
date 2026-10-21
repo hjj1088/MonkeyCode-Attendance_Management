@@ -209,9 +209,9 @@ class TestExport:
         assert 'TIME(17,30,0)' in joined.replace(' ', '')
 
         assert self._cell_hhmm(ws.cell(3, 4)) == '09:30'
-        assert self._is_red_font(ws.cell(3, 4)), 'late sign-in must be red'
+        assert not self._is_red_font(ws.cell(3, 4)), 'late color must come from conditional rule, not static font'
         assert self._cell_hhmm(ws.cell(4, 4)) == '16:30'
-        assert self._is_red_font(ws.cell(4, 4)), 'early sign-out must be red'
+        assert not self._is_red_font(ws.cell(4, 4)), 'early color must come from conditional rule, not static font'
 
         results_ok = [
             {'employeeNo': 'T001', 'name': '张三', 'department': '技术部',
@@ -250,7 +250,7 @@ class TestExport:
         assert 'TIME(9,0,0)' in joined
         assert 'TIME(18,0,0)' in joined
         assert not self._is_red_font(ws.cell(3, 4)), '09:00 is on time vs config 09:00'
-        assert self._is_red_font(ws.cell(4, 4)), '17:30 is early vs config 18:00'
+        assert not self._is_red_font(ws.cell(4, 4)), 'early color must come from conditional rule, not static font'
 
         template = {'fields': [
             {'field': 'signIn', 'label': '签到'},
@@ -264,7 +264,7 @@ class TestExport:
         flat_joined = '\n'.join(self._cf_formulas(ws_flat)).replace(' ', '')
         assert 'TIME(9,0,0)' in flat_joined
         assert 'TIME(18,0,0)' in flat_joined
-        assert self._is_red_font(ws_flat.cell(2, 1)), '09:30 late vs config 09:00'
+        assert not self._is_red_font(ws_flat.cell(2, 1)), 'late color must come from conditional rule, not static font'
         assert not self._is_red_font(ws_flat.cell(2, 2)), '18:00 on time vs config 18:00'
 
     def test_build_calendar_groups_by_department(self):
