@@ -96,6 +96,7 @@ import AppIcon from '../components/AppIcon.vue';
 import { apiRequest } from '../shared/api';
 import Store from '../shared/store';
 import Auth from '../shared/auth';
+import RulesEngine, { RULES_VERSION } from '../shared/rules';
 import { labelForField, isSelfValue } from '../shared/fieldMap';
 
 const fileInput = ref(null);
@@ -231,9 +232,29 @@ function showPreview(f) {
   previewRows.value = f.records.slice(0, 10);
 }
 
+const IMPORT_MONTH_FIELDS = {
+  punch: 'date',
+  leave: 'startDate',
+  travel: 'startDate',
+  overtime: 'startTime',
+  miss_punch: 'missDate',
+};
+
+function monthOf(d) {
+  const s = String(d || '').slice(0, 10);
+  return /^\d{4}-\d{2}$/.test(s.slice(0, 7)) ? s.slice(0, 7) : null;
+}
+
+function recordMonth(type, r) {
+  const field = IMPORT_MONTH_FIELDS[type];
+  return field ? monthOf(r && r[field]) : null;
+}
+
 async function importAll() {
   importing.value = true;
   let scheduleFile = null;
+  const affectedMonths = new Set();
+  let totalImported = 0;
   try {
     for (const f of files.value) {
       if (f.imported) continue;
@@ -248,6 +269,11 @@ async function importAll() {
         if (res.skipped) {
           importLog.value.unshift({ time: new Date().toLocaleTimeString(), file: f.fileName, type: f.fileType, count: 0, action: 'skip', msg: '已存在，跳过' });
         } else {
+          totalImported += res.imported || 0;
+          for (const r of f.records || []) {
+            const m = recordMonth(f.fileType, r);
+            if (m) affectedMonths.add(m);
+          }
           importLog.value.unshift({ time: new Date().toLocaleTimeString(), file: f.fileName, type: f.fileType, count: res.imported, action: 'ok', msg: '导入 ' + res.imported + ' 条' + (res.duplicates ? '，跳过重复 ' + res.duplicates + ' 条' : '') });
         }
       } catch (innerErr) {
@@ -262,6 +288,13 @@ async function importAll() {
           body: JSON.stringify({ type: 'schedule', records: scheduleFile.records, file_name: scheduleFile.fileName }),
         });
         scheduleFile.imported = true;
+        totalImported += res.imported || 0;
+        if ((res.imported || 0) > 0) {
+          for (const day of Excel.flattenScheduleDays(scheduleFile.records)) {
+            const m = monthOf(day.date);
+            if (m) affectedMonths.add(m);
+          }
+        }
         importLog.value.unshift({ time: new Date().toLocaleTimeString(), file: scheduleFile.fileName, type: 'schedule', count: res.imported, action: 'ok', msg: res.detail || ('导入 ' + res.imported + ' 条') });
       } catch (innerErr) {
         scheduleFile.error = innerErr.message;
@@ -269,7 +302,27 @@ async function importAll() {
       }
     }
     if (files.value.length > 0 && files.value.every(f => f.imported || f.fileType === 'unknown')) {
-      alert('所有数据导入完成！可前往考勤计算页面运行计算。');
+      if (totalImported === 0) {
+        alert('所有数据均已存在（重复导入已跳过），考勤结果无需更新。');
+      } else {
+        const months = [...affectedMonths].sort();
+        let calcOk = true;
+        try {
+          for (const m of months) {
+            await RulesEngine.calculateMonth(m);
+            await Store.put('settings', { key: 'last_calc_' + m, value: Date.now() });
+            await Store.put('settings', { key: 'rules_version', value: RULES_VERSION });
+          }
+        } catch (calcErr) {
+          calcOk = false;
+          importLog.value.unshift({ time: new Date().toLocaleTimeString(), file: '-', type: 'calculate', count: 0, action: 'err', msg: '自动计算失败: ' + (calcErr.message || calcErr) });
+        }
+        if (calcOk) {
+          alert('数据导入完成，已自动重新计算：' + (months.join('、') || '（未识别到日期，请手动到考勤页计算）'));
+        } else {
+          alert('数据导入完成，但自动计算失败，请前往考勤计算页面手动运行计算。');
+        }
+      }
     }
   } catch (err) {
     alert('导入出错: ' + err.message);
