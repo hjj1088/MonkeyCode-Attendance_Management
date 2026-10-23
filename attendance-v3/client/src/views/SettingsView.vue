@@ -92,6 +92,7 @@
 import { ref, computed, onMounted } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import { apiRequest } from '../shared/api';
+import { formatVersion } from '../shared/version';
 
 const tab = ref('general');
 const saved = ref(false);
@@ -113,7 +114,7 @@ const uptimeText = computed(() => {
 
 const appVersionText = computed(() => {
   const v = status.value && status.value.app_version;
-  return v ? ('V' + v) : 'V3.3.2';
+  return formatVersion({ app_version: v }) || 'V3.3.2';
 });
 
 onMounted(async () => {

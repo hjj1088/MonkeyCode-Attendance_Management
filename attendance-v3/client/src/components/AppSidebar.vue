@@ -35,6 +35,7 @@ import { computed, ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Auth from '../shared/auth';
 import { apiRequest } from '../shared/api';
+import { formatVersion } from '../shared/version';
 
 defineProps({ open: { type: Boolean, default: false } });
 defineEmits(['navigate']);
@@ -46,10 +47,8 @@ const versionText = ref('V3.3.2');
 onMounted(async () => {
   try {
     const v = await apiRequest('/system/version');
-    if (v && v.app_version) {
-      const patch = String(v.app_version).split('.')[2] || '';
-      versionText.value = (v.version_name || '') + (patch ? '.' + patch : '');
-    }
+    const formatted = formatVersion(v);
+    if (formatted) versionText.value = formatted;
   } catch (e) { /* 保持默认版本号 */ }
 });
 

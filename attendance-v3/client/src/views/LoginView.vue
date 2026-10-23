@@ -33,6 +33,7 @@ import { useRouter } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
 import Auth from '../shared/auth';
 import { apiRequest } from '../shared/api';
+import { formatVersion } from '../shared/version';
 
 const router = useRouter();
 const username = ref('');
@@ -41,16 +42,15 @@ const error = ref('');
 const loading = ref(false);
 const usernameInput = ref(null);
 const passwordInput = ref(null);
-const versionLabel = ref('V3.3 考勤管理系统');
+const versionLabel = ref('V3.3.2 考勤管理系统');
 
 onMounted(async () => {
   await nextTick();
   if (usernameInput.value) usernameInput.value.focus();
   try {
     const v = await apiRequest('/system/version');
-    if (v && (v.version_name || v.app_version)) {
-      versionLabel.value = (v.version_name || ('V' + v.app_version)) + ' 考勤管理系统';
-    }
+    const formatted = formatVersion(v);
+    if (formatted) versionLabel.value = formatted + ' 考勤管理系统';
   } catch (e) { /* 保持默认 */ }
 });
 
