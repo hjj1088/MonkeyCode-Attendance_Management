@@ -674,6 +674,21 @@ def handle_overtime_all_get(handler):
     handler._send_json(0, data=[dict(r) for r in rows])
 
 
+def handle_attendance_months(handler):
+    if _require_any_user(handler) is None:
+        return
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT month FROM attendance_results WHERE month IS NOT NULL AND month != '' ORDER BY month DESC"
+        ).fetchall()
+        conn.close()
+        handler._send_json(0, data=[r['month'] for r in rows])
+    except Exception as e:
+        conn.close()
+        handler._send_json(500, message=str(e))
+
+
 def handle_data_month(handler):
     if _require_any_user(handler) is None:
         return

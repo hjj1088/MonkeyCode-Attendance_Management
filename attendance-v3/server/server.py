@@ -179,6 +179,11 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             handle_data_month(self)
             return
 
+        if path == '/api/attendance/months':
+            from handlers.attendance import handle_attendance_months
+            handle_attendance_months(self)
+            return
+
         # GET /api/* paths require auth
         if path.startswith('/api/'):
             if not self._authenticate():
@@ -499,6 +504,7 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         try:
             index_name = params.get('index', [None])[0]
             index_value = params.get('value', [None])[0]
+            limit = params.get('limit', [None])[0]
             if index_name and index_value is not None:
                 rows = conn.execute(
                     f'SELECT * FROM {table} WHERE "{index_name}" = ?',
@@ -506,6 +512,12 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 ).fetchall()
             else:
                 rows = conn.execute(f'SELECT * FROM {table}').fetchall()
+            try:
+                limit_n = int(limit) if limit is not None else None
+            except (TypeError, ValueError):
+                limit_n = None
+            if limit_n is not None and limit_n >= 0:
+                rows = rows[:limit_n]
             conn.close()
             self._send_json(0, data=[json_serialize(dict(r)) for r in rows])
         except Exception as e:

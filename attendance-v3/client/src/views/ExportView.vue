@@ -67,6 +67,7 @@ import { ref, watch, onMounted } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import Store from '../shared/store';
 import Excel from '../shared/excel';
+import { apiRequest } from '../shared/api';
 
 const templates = ref([]);
 const selectedTemplate = ref(null);
@@ -132,15 +133,16 @@ async function saveAsTemplate() {
 }
 
 async function updatePreview() {
-  const all = await Store.getAll('attendance_results');
-  previewData.value = (all || []).slice(0, 5);
+  const m = exportMonth.value || availableMonths.value[0] || '';
+  if (!m) { previewData.value = []; return; }
+  previewData.value = await apiRequest('/store/attendance_results?index=month&value=' + encodeURIComponent(m) + '&limit=5');
 }
 
 async function loadMonths() {
-  const results = await Store.getAll('attendance_results');
-  const months = new Set(results.filter(r => r.month).map(r => r.month));
-  availableMonths.value = [...months].sort();
-  if (availableMonths.value.length) exportMonth.value = availableMonths.value[availableMonths.value.length - 1];
+  const months = await apiRequest('/attendance/months');
+  availableMonths.value = (months || []).sort().reverse();
+  if (availableMonths.value.length) exportMonth.value = availableMonths.value[0];
+  await updatePreview();
 }
 
 async function doExport() {
