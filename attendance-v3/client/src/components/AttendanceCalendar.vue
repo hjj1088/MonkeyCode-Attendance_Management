@@ -31,13 +31,15 @@ import { statusLabel, statusBadgeClass } from '../shared/constants';
 
 function formatMinutes(min) {
   if (min < 60) return min + 'm';
-  const h = Math.round(min / 60 * 10) / 10;
-  return h + 'h';
+  const h = Math.floor(min / 60);
+  const r = min % 60;
+  return r ? h + 'h' + r + 'm' : h + 'h';
 }
 
 function statusWithTime(r) {
   const label = statusLabel(r.status);
   if (r.status === 'abnormal' && r.lateMinutes) return label + formatMinutes(r.lateMinutes);
+  if (r.status === 'early_leave' && r.earlyMinutes) return label + formatMinutes(r.earlyMinutes);
   if (r.status === 'leave' && r.leaveHours) return label + (Math.round(r.leaveHours * 10) / 10) + 'h';
   return label;
 }

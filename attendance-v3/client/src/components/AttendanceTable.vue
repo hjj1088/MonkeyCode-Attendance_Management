@@ -27,8 +27,8 @@
         <td>{{ holidayMap[r.date] ? holidayMap[r.date].name : (r.isRestDay ? '休息' : '上班') }}</td>
         <td>{{ r.signIn || '--' }}</td>
         <td>{{ r.signOut || '--' }}</td>
-        <td class="c-num">{{ r.lateMinutes || 0 }}</td>
-        <td class="c-num">{{ r.earlyMinutes || 0 }}</td>
+        <td class="c-num">{{ formatDuration(r.lateMinutes) }}</td>
+        <td class="c-num">{{ formatDuration(r.earlyMinutes) }}</td>
         <td class="c-num">{{ r.overtimeHours || 0 }}</td>
         <td class="c-note-cell">{{ remarkText(r) }}</td>
         <td><span class="badge" :class="statusBadgeClass(r.status)">{{ statusLabel(r.status) }}</span></td>
@@ -51,7 +51,7 @@
 import { computed } from 'vue';
 import StickyTable from './StickyTable.vue';
 import AppIcon from './AppIcon.vue';
-import { statusLabel, statusBadgeClass, remarkText, reviewStatusLabel } from '../shared/constants';
+import { statusLabel, statusBadgeClass, remarkText, reviewStatusLabel, formatDuration } from '../shared/constants';
 
 const props = defineProps({
   rows: { type: Array, default: () => [] },

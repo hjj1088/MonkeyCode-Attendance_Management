@@ -169,17 +169,17 @@ const otDay = rowFor('2026-08-12');
 assert.strictEqual(otDay.status, 'normal');
 assert.strictEqual(otDay.overtimeHours, 3);
 
-// 4. 短假豁免：8-13 代请假 1h（subject 王五）覆盖迟到 56min → 正常
+// 4. 短假按真实打卡偏差显示：8-13 代请假 1h（subject 王五）+ 迟到 56min → 真实迟到保留
 const shortLeaveDay = rowFor('2026-08-13', 'E002');
-assert.strictEqual(shortLeaveDay.status, 'normal', '1h proxy leave should waive 56min late');
-assert.strictEqual(shortLeaveDay.lateMinutes, 0);
+assert.strictEqual(shortLeaveDay.status, 'abnormal', '1h proxy leave keeps real 56min late');
+assert.strictEqual(shortLeaveDay.lateMinutes, 56);
 assert.strictEqual(shortLeaveDay.leaveType, '事假');
 assert.strictEqual(shortLeaveDay.leaveHours, 1);
 
-// 5. 短假不足抵扣：8-21 迟到 86min - 请假 30min = 56min（超出容错，异常保留）
+// 5. 短假同上：8-21 迟到 86min 保留真实值（请假不再抵扣迟到）
 const partialLeaveDay = rowFor('2026-08-21', 'E002');
-assert.strictEqual(partialLeaveDay.status, 'abnormal', '30min leave cannot cover 86min late');
-assert.strictEqual(partialLeaveDay.lateMinutes, 56);
+assert.strictEqual(partialLeaveDay.status, 'abnormal', '86min late stays real');
+assert.strictEqual(partialLeaveDay.lateMinutes, 86);
 
 // 6. 漏打卡时段匹配：缺上午打卡 + 说明「上午」→ 正常
 const missAmDay = rowFor('2026-08-18', 'E002');

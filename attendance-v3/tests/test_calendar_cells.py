@@ -103,7 +103,7 @@ def test_miss_punch_am():
         _make_result('001', '2026-02-02', signOut='17:35', status='normal', missTime='上午', sourceMissIds=[1])
     ]
     am, pm = _get_cells(results)
-    assert am == '漏打卡', f"'{am}' != '漏打卡'"
+    assert am == '补卡', f"'{am}' != '补卡'"
     assert pm == '17:35', f"'{pm}' != '17:35'"
 
 
@@ -114,7 +114,7 @@ def test_miss_punch_pm():
     ]
     am, pm = _get_cells(results)
     assert am == '08:25', f"'{am}' != '08:25'"
-    assert pm == '漏打卡', f"'{pm}' != '漏打卡'"
+    assert pm == '补卡', f"'{pm}' != '补卡'"
 
 
 def test_legacy_no_sign_in_shows_absent():

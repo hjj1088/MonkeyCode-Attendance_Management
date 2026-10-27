@@ -132,8 +132,8 @@
           <div><span class="dg-label">部门</span><div class="dg-value">{{ detail.department }}</div></div>
           <div><span class="dg-label">签到</span><div class="dg-value">{{ detail.signIn || '--' }}</div></div>
           <div><span class="dg-label">签退</span><div class="dg-value">{{ detail.signOut || '--' }}</div></div>
-          <div><span class="dg-label">迟到</span><div class="dg-value">{{ detail.lateMinutes }}min</div></div>
-          <div><span class="dg-label">早退</span><div class="dg-value">{{ detail.earlyMinutes }}min</div></div>
+          <div><span class="dg-label">迟到</span><div class="dg-value">{{ formatDuration(detail.lateMinutes) }}</div></div>
+          <div><span class="dg-label">早退</span><div class="dg-value">{{ formatDuration(detail.earlyMinutes) }}</div></div>
           <div><span class="dg-label">加班</span><div class="dg-value">{{ detail.overtimeHours }}h</div></div>
           <div><span class="dg-label">出差</span><div class="dg-value">{{ detail.travelHours }}h</div></div>
           <div><span class="dg-label">请假类型</span><div class="dg-value">{{ detail.leaveType || '--' }} <span v-if="detail.leaveHours">({{ detail.leaveHours }}h)</span></div></div>
@@ -144,7 +144,7 @@
         <div v-if="detail.sourcePunches && detail.sourcePunches.length">
           <div class="section-title">关联打卡记录</div>
           <table class="source-table"><thead><tr><th>签到</th><th>签退</th><th>迟到</th><th>早退</th></tr></thead>
-          <tbody><tr v-for="p in detail.sourcePunches" :key="p.id"><td>{{ p.signIn }}</td><td>{{ p.signOut }}</td><td>{{ p.lateMinutes }}</td><td>{{ p.earlyMinutes }}</td></tr></tbody></table>
+          <tbody><tr v-for="p in detail.sourcePunches" :key="p.id"><td>{{ p.signIn }}</td><td>{{ p.signOut }}</td><td>{{ formatDuration(p.lateMinutes) }}</td><td>{{ formatDuration(p.earlyMinutes) }}</td></tr></tbody></table>
         </div>
         <div v-if="detail.sourceLeaves && detail.sourceLeaves.length">
           <div class="section-title">关联请假记录</div>
@@ -181,7 +181,7 @@ import Store from '../shared/store';
 import RulesEngine, { RULES_VERSION } from '../shared/rules';
 import { apiRequest } from '../shared/api';
 import Auth from '../shared/auth';
-import { statusLabel, statusBadgeClass, statusColor, reviewStatusLabel, calCellClass } from '../shared/constants';
+import { statusLabel, statusBadgeClass, statusColor, reviewStatusLabel, calCellClass, formatDuration } from '../shared/constants';
 
 const router = useRouter();
 const role = Auth.getRole();

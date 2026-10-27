@@ -4,7 +4,7 @@
 
 ## RULES_VERSION 常量 (v1.0.26)
 
-`const RULES_VERSION = '1.0.31'`，定义于 rules.js 顶部。版本号随每次规则逻辑变更递增。
+`const RULES_VERSION = '1.0.33'`，定义于 rules.js 顶部。版本号随每次规则逻辑变更递增。
 
 **用途**：考勤页 `loadResults()` 读取该版本号，与 `settings` 表中存储的 `rules_version` 比对。若不一致，说明规则代码已更新，将自动触发重新计算而非使用陈旧的缓存结果。
 
@@ -72,7 +72,7 @@
 4. 获取该员工的排班表
 5. 按日期 (1日 ~ 月末) 遍历每天：
    - `_isWorkDay()` 判断是否休息日
-   - 判断 `status` (normal → rest → leave → travel → normal(漏打卡) → absent → abnormal)
+    - 判断 `status` (normal → rest → leave → travel → normal(漏打卡) → absent → abnormal/early_leave)
    - 计算偏差和加班
    - 产出结果记录 (含 sourcePunchIds 等关联 ID)
 
@@ -82,11 +82,17 @@
 
    **v1.0.27 修复**：容错豁免逻辑修正。原先将全月所有 `status === 'abnormal'` 的记录无条件重置为 `normal`，导致未打卡导致的 `abnormal` 也被错误豁免。现在使用 `lateDateSet = new Set(lateRecords.map(r => r.date))`，仅对实际出现在 `lateRecords`（迟到日期列表）中的记录执行复位。
 
-   **v1.0.30 修复（V3.3.1，OA 数据与计算联动）**：
-   - **请假豁免迟到/早退**：当天有请假记录时，`leaveHours * 60` 抵扣迟到与早退分钟数（各自独立抵扣）；抵扣后为 0 则不计迟到。全天假（`status = 'leave'`）迟到早退直接清零。`abnormal` 判定改用抵扣后的 `adjustedLateMinutes`。场景：迟到 56min + 请假 1h → normal
-   - **漏打卡时段匹配**：半缺勤（有打卡但缺单边）旷工判定按时段细化——缺上午打卡需漏打卡说明覆盖 am（`_missCoversPeriod`），缺下午同理；说明时段对不上仍判 `absent`。完全无打卡 + 任一漏打卡说明 → normal 保持不变。场景：缺上午打卡 + 说明「上午」→ normal；说明「下午」→ absent
-   - 说明：历史文档曾描述 v1.0.28 引入 `no_sign_in`/`no_sign_out` 细分状态，git 全历史中 rules.js 从未包含该实现，半缺勤一直判定为 `absent`，特此更正
-6. 全月汇总后执行容错豁免
+    **v1.0.30 修复（V3.3.1，OA 数据与计算联动）**：
+    - **漏打卡时段匹配**：半缺勤（有打卡但缺单边）旷工判定按时段细化——缺上午打卡需漏打卡说明覆盖 am（`_missCoversPeriod`），缺下午同理；说明时段对不上仍判 `absent`。完全无打卡 + 任一漏打卡说明 → normal 保持不变。场景：缺上午打卡 + 说明「上午」→ normal；说明「下午」→ absent
+    - 说明：历史文档曾描述 v1.0.28 引入 `no_sign_in`/`no_sign_out` 细分状态，git 全历史中 rules.js 从未包含该实现，半缺勤一直判定为 `absent`，特此更正
+
+    **v1.0.33 变更（V3.3.4，迟到早退真实偏差）**：
+    - **取消请假分钟抵扣迟到/早退**（撤销 v1.0.30 的抵扣实现）：迟到/早退始终按真实打卡偏差显示。全天假（`status = 'leave'`）迟到早退清零保留。场景：上班 8:30 + 签到 9:51 + 调休 1.5h → 迟到 1h21m（原错误显示 0min）
+    - **新增 `early_leave` 状态（早退）**：工作日有真实打卡且 `adjustedEarlyMinutes > 0` 时状态置 `early_leave`（迟到优先，仅 `status === 'normal'` 时触发）。constants.js 四张映射表与导出 `status_labels` 同步新增。场景：签退 16:18（下班 17:30）→ 状态「早退」（原错误显示「正常」）
+    - **早退容错豁免**：`earlyRecords` 与迟到对称——月内早退次数 ≤ `graceTimes` 且总分钟 ≤ `graceMinutes` 时 `earlyMinutes` 归零、状态恢复 normal
+    - **调休冲抵加班下限钳制**：`adjustedOvertime = Math.max(0, adjustedOvertime - dayHours)`，当日无加班时调休不再产生负数加班（原错误显示 -1.5h）
+    - **时长显示格式统一 `formatDuration`**（constants.js）：`<60` 显示 `45m`，`≥60` 显示 `1h21m`（整点 `1h`，0 显示 `0m`）；WebUI 主表/详情/个人考勤/关联打卡记录/日历 tooltip 统一使用
+ 6. 全月汇总后执行容错豁免（迟到与早退各自独立判断）
 7. 更新加班结余 (`_updateCarryOver`)
 8. 清空旧结果 → 写入新结果
 

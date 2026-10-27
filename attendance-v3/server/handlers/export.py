@@ -136,7 +136,7 @@ def build_flat_report(records, template, filename, startTime=None, endTime=None)
     headers = [f['label'] for f in template['fields']]
 
     status_labels = {
-        'normal': '正常', 'rest': '休息', 'abnormal': '迟到',
+        'normal': '正常', 'rest': '休息', 'abnormal': '迟到', 'early_leave': '早退',
         'leave': '请假', 'travel': '出差', 'absent': '缺勤',
         'overtime': '疑似加班', 'suspect_ot': '疑似加班',
         'no_sign_in': '缺勤', 'no_sign_out': '缺勤',
@@ -286,7 +286,7 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
             return '/'.join(parts)
         mt = str(r.get('missTime', ''))
         if r.get('missTime') and ('上午' in mt or '上班' in mt or 'AM' in mt):
-            return '漏打卡'
+            return '补卡'
         if r.get('status') in ('absent', 'no_sign_in', 'no_sign_out') or r.get('absent'):
             return '缺勤'
         return ''
@@ -307,7 +307,7 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
             return '/'.join(parts)
         mt = str(r.get('missTime', ''))
         if r.get('missTime') and ('下午' in mt or '下班' in mt or 'PM' in mt):
-            return '漏打卡'
+            return '补卡'
         if r.get('status') in ('absent', 'no_sign_in', 'no_sign_out') or r.get('absent'):
             return '缺勤'
         return ''

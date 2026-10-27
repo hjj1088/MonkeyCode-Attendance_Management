@@ -4,7 +4,7 @@
 import Store from './store';
 import { apiRequest } from './api';
 
-export const RULES_VERSION = '1.0.32';
+export const RULES_VERSION = '1.0.33';
 
 export const RulesEngine = {
   async getConfig() {
@@ -177,6 +177,7 @@ export const RulesEngine = {
     for (const [employeeNo, punches] of Object.entries(punchByEmployee)) {
       const schedulesData = scheduleByEmployee[employeeNo] || yearMonthFallback || null;
       const lateRecords = [];
+      const earlyRecords = [];
 
       const employeeName = punches[0].name;
       const department = punches[0].department;
@@ -262,23 +263,15 @@ export const RulesEngine = {
             leaveHours += dayHours;
             leaveDetails.push({ type: l.leaveType || '请假', hours: dayHours });
             if (l.leaveType && l.leaveType.includes('调休')) {
-              adjustedOvertime -= dayHours;
+              adjustedOvertime = Math.max(0, adjustedOvertime - dayHours);
             }
           }
           if (!hasRealPunch || leaveRecord.leaveDays >= 1) {
             status = 'leave';
           }
-          const leaveMinutes = leaveHours * 60;
           if (isWorkDay && status === 'leave') {
             adjustedLateMinutes = 0;
             adjustedEarlyMinutes = 0;
-          } else if (isWorkDay && leaveMinutes > 0) {
-            if (adjustedLateMinutes > 0) {
-              adjustedLateMinutes = adjustedLateMinutes <= leaveMinutes ? 0 : adjustedLateMinutes - leaveMinutes;
-            }
-            if (adjustedEarlyMinutes > 0) {
-              adjustedEarlyMinutes = adjustedEarlyMinutes <= leaveMinutes ? 0 : adjustedEarlyMinutes - leaveMinutes;
-            }
           }
         }
 
@@ -311,6 +304,11 @@ export const RulesEngine = {
         if (adjustedLateMinutes > 0 && hasRealPunch && isWorkDay && status !== 'leave' && status !== 'travel' && status !== 'absent') {
           lateRecords.push({ date: dateStr, minutes: adjustedLateMinutes });
           status = 'abnormal';
+        }
+
+        if (adjustedEarlyMinutes > 0 && hasRealPunch && isWorkDay && status === 'normal') {
+          earlyRecords.push({ date: dateStr, minutes: adjustedEarlyMinutes });
+          status = 'early_leave';
         }
 
         let workHours = 0;
@@ -357,6 +355,17 @@ export const RulesEngine = {
         for (const r of results.filter(r => r.employeeNo === employeeNo)) {
           if (lateDateSet.has(r.date) && r.status === 'abnormal') {
             r.lateMinutes = 0;
+            r.status = 'normal';
+          }
+        }
+      }
+
+      const totalEarlyMinutes = earlyRecords.reduce((sum, r) => sum + r.minutes, 0);
+      if (earlyRecords.length <= config.graceTimes && totalEarlyMinutes <= config.graceMinutes) {
+        const earlyDateSet = new Set(earlyRecords.map(r => r.date));
+        for (const r of results.filter(r => r.employeeNo === employeeNo)) {
+          if (earlyDateSet.has(r.date) && r.status === 'early_leave') {
+            r.earlyMinutes = 0;
             r.status = 'normal';
           }
         }

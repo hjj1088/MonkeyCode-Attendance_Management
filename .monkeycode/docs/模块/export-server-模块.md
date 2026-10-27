@@ -173,6 +173,8 @@ v2.0.2 新增。将 `HH:MM` 时间字符串转换为分钟数（`int(h)*60 + int
 
 > **v2.0.2 变更**：`build_am_cell` 中 `leave` 状态 `请假/` 前缀已移除（直接显示 `类型/h`），`overtime`/`suspect_ot` 状态不再覆盖签到时间为"疑似加班"文本。
 
+> **v3.3.4 变更（与 WebUI 备注文案统一）**：`build_am_cell`/`build_pm_cell` 中漏打卡说明（missTime 含「上午/上班/AM」或「下午/下班/PM」）的显示文案由 `漏打卡` 改为 `补卡`（WebUI 备注同款），命中 `_get_cell_style` 的 `补卡` 正则显示 `BLUE_FONT` 蓝色；`status_labels` 新增 `early_leave → '早退'`（v1.0.33 计算引擎新增状态）。
+
 ## 条件格式规则
 
 v2.0.2 新增迟到/早退的 Excel 条件格式，采用**直接单元格样式 + FormulaRule** 双重保障：

@@ -5,6 +5,7 @@ const STATUS_LABELS = {
   normal: '正常',
   rest: '休息',
   abnormal: '迟到',
+  early_leave: '早退',
   leave: '请假',
   travel: '出差',
   absent: '缺勤',
@@ -18,6 +19,7 @@ const STATUS_BADGE = {
   normal: 'badge-normal',
   rest: 'badge-rest',
   abnormal: 'badge-late',
+  early_leave: 'badge-late',
   leave: 'badge-leave',
   travel: 'badge-travel',
   absent: 'badge-miss',
@@ -31,6 +33,7 @@ const STATUS_COLORS = {
   normal: 'var(--jade)',
   rest: 'var(--ink-secondary)',
   abnormal: 'var(--vermillion)',
+  early_leave: 'var(--vermillion)',
   leave: 'var(--celadon)',
   travel: 'var(--celadon)',
   absent: 'var(--vermillion)',
@@ -43,6 +46,7 @@ const STATUS_COLORS = {
 const CAL_CELL_CLASS = {
   normal: 'cal-normal',
   abnormal: 'cal-abnormal',
+  early_leave: 'cal-abnormal',
   absent: 'cal-absent',
   rest: 'cal-rest',
   leave: 'cal-leave',
@@ -57,6 +61,15 @@ const CAL_CELL_CLASS = {
 
 export function statusLabel(s) {
   return STATUS_LABELS[s] || s || '';
+}
+
+export function formatDuration(min) {
+  const m = Math.round(Number(min) || 0);
+  if (m <= 0) return '0m';
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? h + 'h' + r + 'm' : h + 'h';
 }
 
 export function statusBadgeClass(s) {

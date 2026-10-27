@@ -30,8 +30,8 @@
             <td>{{ r.isRestDay ? '休息' : '上班' }}</td>
             <td>{{ r.signIn || '--' }}</td>
             <td>{{ r.signOut || '--' }}</td>
-            <td>{{ r.lateMinutes || 0 }}</td>
-            <td>{{ r.earlyMinutes || 0 }}</td>
+            <td>{{ formatDuration(r.lateMinutes) }}</td>
+            <td>{{ formatDuration(r.earlyMinutes) }}</td>
             <td>{{ r.overtimeHours || 0 }}</td>
             <td class="c-note">{{ remarkText(r) }}</td>
             <td><span class="badge" :class="statusBadgeClass(r.status)">{{ statusLabel(r.status) }}</span></td>
@@ -63,8 +63,8 @@
         <div class="detail-grid">
           <div><span class="dg-label">签到</span><div class="dg-value">{{ detail.signIn || '--' }}</div></div>
           <div><span class="dg-label">签退</span><div class="dg-value">{{ detail.signOut || '--' }}</div></div>
-          <div><span class="dg-label">迟到</span><div class="dg-value">{{ detail.lateMinutes }}min</div></div>
-          <div><span class="dg-label">早退</span><div class="dg-value">{{ detail.earlyMinutes }}min</div></div>
+          <div><span class="dg-label">迟到</span><div class="dg-value">{{ formatDuration(detail.lateMinutes) }}</div></div>
+          <div><span class="dg-label">早退</span><div class="dg-value">{{ formatDuration(detail.earlyMinutes) }}</div></div>
           <div><span class="dg-label">加班</span><div class="dg-value">{{ detail.overtimeHours }}h</div></div>
           <div><span class="dg-label">状态</span><div class="dg-value"><span class="badge" :class="statusBadgeClass(detail.status)">{{ statusLabel(detail.status) }}</span></div></div>
         </div>
@@ -77,7 +77,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue';
 import { apiRequest } from '../shared/api';
 import Store from '../shared/store';
-import { statusLabel, statusBadgeClass, remarkText, reviewStatusLabel, calCellClass } from '../shared/constants';
+import { statusLabel, statusBadgeClass, remarkText, reviewStatusLabel, calCellClass, formatDuration } from '../shared/constants';
 import AttendanceCalendar from '../components/AttendanceCalendar.vue';
 import StickyTable from '../components/StickyTable.vue';
 import AppIcon from '../components/AppIcon.vue';
