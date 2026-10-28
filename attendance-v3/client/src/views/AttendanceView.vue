@@ -310,15 +310,20 @@ watch(viewMode, () => {
   savePrefs();
   if (viewMode.value === 'calendar') buildCalendar();
 });
-watch([filterDept, filterStatus, searchName], () => {
-  currentPage.value = 1;
-  const firstRow = filteredResults.value[0];
+function syncCalendarToPage() {
+  const firstRow = pagedResults.value[0];
   if (firstRow && calendarEmployees.value.some(e => e.employeeNo === firstRow.employeeNo)) {
     if (calEmployee.value !== firstRow.employeeNo) {
       calEmployee.value = firstRow.employeeNo;
       if (viewMode.value === 'calendar') buildCalendar();
     }
   }
+}
+
+watch(currentPage, () => { syncCalendarToPage(); });
+watch([filterDept, filterStatus, searchName], () => {
+  currentPage.value = 1;
+  syncCalendarToPage();
 });
 watch(totalPages, (n) => { if (currentPage.value > n) currentPage.value = n; });
 onUnmounted(() => setContextChip(''));
