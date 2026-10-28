@@ -209,22 +209,23 @@ const holidayMap = ref({});
 const allSchedules = ref([]);
 const holidaysData = ref([]);
 
+const compareEmployeeRows = (a, b) => {
+  if (a.employeeNo !== b.employeeNo) {
+    const na = parseInt(a.employeeNo) || 0;
+    const nb = parseInt(b.employeeNo) || 0;
+    if (na !== nb) return na - nb;
+    return String(a.employeeNo).localeCompare(String(b.employeeNo));
+  }
+  if (a.department !== b.department) return a.department.localeCompare(b.department);
+  return a.date.localeCompare(b.date);
+};
+
 const filteredResults = computed(() => {
   let list = results.value;
   if (filterDept.value) list = list.filter(r => r.department === filterDept.value);
   if (filterStatus.value) list = list.filter(r => r.status === filterStatus.value);
   if (searchName.value) list = list.filter(r => r.name.includes(searchName.value));
-  list = [...list].sort((a, b) => {
-    if (a.employeeNo !== b.employeeNo) {
-      const na = parseInt(a.employeeNo) || 0;
-      const nb = parseInt(b.employeeNo) || 0;
-      if (na !== nb) return na - nb;
-      return String(a.employeeNo).localeCompare(String(b.employeeNo));
-    }
-    if (a.department !== b.department) return a.department.localeCompare(b.department);
-    return a.date.localeCompare(b.date);
-  });
-  return list;
+  return [...list].sort(compareEmployeeRows);
 });
 
 const calEmployeeInfo = computed(() => {
@@ -309,7 +310,16 @@ watch(viewMode, () => {
   savePrefs();
   if (viewMode.value === 'calendar') buildCalendar();
 });
-watch([filterDept, filterStatus], () => { currentPage.value = 1; });
+watch([filterDept, filterStatus, searchName], () => {
+  currentPage.value = 1;
+  const firstRow = filteredResults.value[0];
+  if (firstRow && calendarEmployees.value.some(e => e.employeeNo === firstRow.employeeNo)) {
+    if (calEmployee.value !== firstRow.employeeNo) {
+      calEmployee.value = firstRow.employeeNo;
+      if (viewMode.value === 'calendar') buildCalendar();
+    }
+  }
+});
 watch(totalPages, (n) => { if (currentPage.value > n) currentPage.value = n; });
 onUnmounted(() => setContextChip(''));
 
@@ -391,11 +401,18 @@ async function loadResults(settingsMap) {
   holidayMap.value = {};
   for (const h of holidaysData.value) { if (h.date && h.date.startsWith(currentMonth.value)) holidayMap.value[h.date] = h; }
   if (viewMode.value === 'calendar') buildCalendar();
+  const sortedRows = [...results.value].sort(compareEmployeeRows);
   const es = new Map();
-  for (const r of results.value) { if (!es.has(r.employeeNo)) es.set(r.employeeNo, { employeeNo: r.employeeNo, name: r.name, department: r.department }); }
-  calendarEmployees.value = [...es.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  for (const r of sortedRows) { if (!es.has(r.employeeNo)) es.set(r.employeeNo, { employeeNo: r.employeeNo, name: r.name, department: r.department }); }
+  calendarEmployees.value = [...es.values()];
   if (!initialCalSet.value) {
-    if (calendarEmployees.value.length) { calEmployee.value = calendarEmployees.value[0].employeeNo; initialCalSet.value = true; }
+    const firstRow = filteredResults.value[0];
+    if (firstRow && calendarEmployees.value.some(e => e.employeeNo === firstRow.employeeNo)) {
+      calEmployee.value = firstRow.employeeNo;
+    } else if (calendarEmployees.value.length) {
+      calEmployee.value = calendarEmployees.value[0].employeeNo;
+    }
+    if (calEmployee.value) initialCalSet.value = true;
   } else if (calEmployee.value && !calendarEmployees.value.some(e => e.employeeNo === calEmployee.value)) {
     calEmployee.value = calendarEmployees.value.length ? calendarEmployees.value[0].employeeNo : '';
   }

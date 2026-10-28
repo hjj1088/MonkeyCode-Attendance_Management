@@ -42,7 +42,7 @@ defineEmits(['navigate']);
 
 const route = useRoute();
 const router = useRouter();
-const versionText = ref('V3.3.5');
+const versionText = ref('V3.3.6');
 
 onMounted(async () => {
   try {

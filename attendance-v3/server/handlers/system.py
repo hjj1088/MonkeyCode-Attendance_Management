@@ -8,7 +8,7 @@ from database import get_db
 from middleware import verify_token
 
 SERVER_START_TIME = None
-APP_VERSION = '3.3.5'
+APP_VERSION = '3.3.6'
 
 
 def set_start_time():
