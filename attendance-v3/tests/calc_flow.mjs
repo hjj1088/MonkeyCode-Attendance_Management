@@ -76,6 +76,12 @@ const MISS_PUNCH = [
     missTime: '09:00', cardTime: '', reason: '', isSelf: '本人', subject: '王五' },
 ];
 
+// v1.0.34：加班只认加班申请单（8-12 签退 19:30 打卡自带 3h 不计，加班单 3h 计入）
+const OVERTIME = [
+  { id: 'ot1', applicant: '张三', department: '技术部', startTime: '2026-08-12 17:30', endTime: '2026-08-12 20:30',
+    overtimeHours: 3, isSelf: '本人', subject: '张三' },
+];
+
 const SCHEDULES = [
   { employeeNo: 'E001', name: '张三', department: '技术部', year: 2026, month: 8, workDays: ALL_WORKDAYS },
 ];
@@ -124,7 +130,7 @@ globalThis.fetch = (input, init) => {
       leave_records: LEAVES,
       travel_records: [],
       miss_punch_records: MISS_PUNCH,
-      overtime_records: [],
+      overtime_records: OVERTIME,
       schedules: SCHEDULES,
       carry_over: [],
     }[table] || [];
@@ -164,14 +170,14 @@ const late2 = rowFor('2026-08-11');
 assert.strictEqual(late2.status, 'normal', 'grace waiver should clear second late');
 assert.strictEqual(late2.lateMinutes, 0);
 
-// 3. 加班记录保留 overtimeHours
+// 3. 加班只认加班申请单：8-12 加班单 3h 计入（打卡自带 overtimeHours 不计）
 const otDay = rowFor('2026-08-12');
 assert.strictEqual(otDay.status, 'normal');
-assert.strictEqual(otDay.overtimeHours, 3);
+assert.strictEqual(otDay.overtimeHours, 3, "overtime from OA request only");
 
-// 4. 短假按真实打卡偏差显示：8-13 代请假 1h（subject 王五）+ 迟到 56min → 真实迟到保留
+// 4. 请假覆盖：8-13 迟到 56min，代请假 1h（60min >= 56）→ 状态 normal，迟到数值保留真实值
 const shortLeaveDay = rowFor('2026-08-13', 'E002');
-assert.strictEqual(shortLeaveDay.status, 'abnormal', '1h proxy leave keeps real 56min late');
+assert.strictEqual(shortLeaveDay.status, 'normal', '1h proxy leave covers 56min late');
 assert.strictEqual(shortLeaveDay.lateMinutes, 56);
 assert.strictEqual(shortLeaveDay.leaveType, '事假');
 assert.strictEqual(shortLeaveDay.leaveHours, 1);

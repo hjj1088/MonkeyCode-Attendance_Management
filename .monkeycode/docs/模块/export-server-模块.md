@@ -175,6 +175,8 @@ v2.0.2 新增。将 `HH:MM` 时间字符串转换为分钟数（`int(h)*60 + int
 
 > **v3.3.4 变更（与 WebUI 备注文案统一）**：`build_am_cell`/`build_pm_cell` 中漏打卡说明（missTime 含「上午/上班/AM」或「下午/下班/PM」）的显示文案由 `漏打卡` 改为 `补卡`（WebUI 备注同款），命中 `_get_cell_style` 的 `补卡` 正则显示 `BLUE_FONT` 蓝色；`status_labels` 新增 `early_leave → '早退'`（v1.0.33 计算引擎新增状态）。
 
+> **v3.3.5 变更（请假不再全天覆盖）**：`build_am_cell`/`build_pm_cell` 的请假分支收窄为仅 `status == 'leave'`（全天假）显示 `类型/nh` 文本；原先 `or r.get('leaveType')` 导致部分时段请假（如调休 1.5h）在已有签到/签退时也覆盖整格，打卡时间被吞。现在有打卡数据时显示真实签到/签退时间，请假信息看备注列（`调休1.5h`）。
+
 ## 条件格式规则
 
 v2.0.2 新增迟到/早退的 Excel 条件格式，采用**直接单元格样式 + FormulaRule** 双重保障：

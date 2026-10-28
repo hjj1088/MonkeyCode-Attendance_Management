@@ -114,7 +114,7 @@ const uptimeText = computed(() => {
 
 const appVersionText = computed(() => {
   const v = status.value && status.value.app_version;
-  return formatVersion({ app_version: v }) || 'V3.3.4';
+  return formatVersion({ app_version: v }) || 'V3.3.5';
 });
 
 onMounted(async () => {

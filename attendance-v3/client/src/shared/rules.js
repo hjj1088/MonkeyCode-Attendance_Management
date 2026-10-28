@@ -4,7 +4,7 @@
 import Store from './store';
 import { apiRequest } from './api';
 
-export const RULES_VERSION = '1.0.33';
+export const RULES_VERSION = '1.0.34';
 
 export const RulesEngine = {
   async getConfig() {
@@ -196,14 +196,12 @@ export const RulesEngine = {
 
         let firstSignIn = null;
         let lastSignOut = null;
-        let totalOvertime = 0;
         let totalLate = 0;
         let totalEarly = 0;
 
         for (const p of dayPunches) {
           if (p.signIn && (!firstSignIn || p.signIn < firstSignIn)) firstSignIn = p.signIn;
           if (p.signOut && (!lastSignOut || p.signOut > lastSignOut)) lastSignOut = p.signOut;
-          if (isWorkDay) totalOvertime += p.overtimeHours || 0;
           const dev = this._calcDeviation(p.signIn, p.signOut, config);
           totalLate += dev.lateMinutes;
           totalEarly += dev.earlyMinutes;
@@ -215,7 +213,8 @@ export const RulesEngine = {
         let absent = false;
         let adjustedLateMinutes = totalLate;
         let adjustedEarlyMinutes = totalEarly;
-        let adjustedOvertime = totalOvertime;
+        // 加班只认加班申请单：打卡记录自带的 overtimeHours 不计入
+        let adjustedOvertime = 0;
         let leaveType = '';
         let leaveHours = 0;
         let leaveDetails = [];
@@ -301,14 +300,23 @@ export const RulesEngine = {
           }
         }
 
+        // 请假覆盖判定：请假分钟 >= 迟到/早退分钟时状态保持 normal，数值保留真实打卡偏差
+        const leaveMinutesTotal = leaveHours * 60;
+
         if (adjustedLateMinutes > 0 && hasRealPunch && isWorkDay && status !== 'leave' && status !== 'travel' && status !== 'absent') {
-          lateRecords.push({ date: dateStr, minutes: adjustedLateMinutes });
-          status = 'abnormal';
+          const coveredByLeave = !!(leaveRecord && leaveMinutesTotal >= adjustedLateMinutes);
+          if (!coveredByLeave) {
+            lateRecords.push({ date: dateStr, minutes: adjustedLateMinutes });
+            status = 'abnormal';
+          }
         }
 
         if (adjustedEarlyMinutes > 0 && hasRealPunch && isWorkDay && status === 'normal') {
-          earlyRecords.push({ date: dateStr, minutes: adjustedEarlyMinutes });
-          status = 'early_leave';
+          const coveredByLeave = !!(leaveRecord && leaveMinutesTotal >= adjustedEarlyMinutes);
+          if (!coveredByLeave) {
+            earlyRecords.push({ date: dateStr, minutes: adjustedEarlyMinutes });
+            status = 'early_leave';
+          }
         }
 
         let workHours = 0;
@@ -374,9 +382,9 @@ export const RulesEngine = {
       let monthTotalOvertime = 0;
       const empResults = results.filter(r => r.employeeNo === employeeNo);
       for (const r of empResults) {
-        const dayPs = punchByDate[r.date] || [];
-        for (const p of dayPs) {
-          monthTotalOvertime += p.overtimeHours || 0;
+        for (const oid of (r.sourceOvertimeIds || [])) {
+          const rec = overtimeRecords.find(o => o.id === oid);
+          if (rec) monthTotalOvertime += rec.overtimeHours || 0;
         }
       }
 

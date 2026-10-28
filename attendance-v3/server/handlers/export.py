@@ -275,7 +275,7 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
             return ''
         if r.get('status') == 'rest':
             return ''
-        if r.get('status') == 'leave' or r.get('leaveType'):
+        if r.get('status') == 'leave':
             return _leave_lines(r)
         if use_field('signIn') and r.get('signIn'):
             return r['signIn']
@@ -296,7 +296,7 @@ def build_calendar_report(target_month, fields, results, schedules, holidays=Non
             return ''
         if r.get('status') == 'rest':
             return ''
-        if r.get('status') == 'leave' or r.get('leaveType'):
+        if r.get('status') == 'leave':
             return _leave_lines(r)
         if use_field('signOut') and r.get('signOut'):
             return r['signOut']
