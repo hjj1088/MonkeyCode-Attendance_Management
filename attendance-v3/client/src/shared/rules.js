@@ -4,7 +4,7 @@
 import Store from './store';
 import { apiRequest } from './api';
 
-export const RULES_VERSION = '1.0.34';
+export const RULES_VERSION = '1.0.35';
 
 export const RulesEngine = {
   async getConfig() {
@@ -16,6 +16,7 @@ export const RulesEngine = {
       earlyThreshold: 0,
       graceTimes: 2,
       graceMinutes: 30,
+      overtimeThreshold: 30,
     };
   },
 
@@ -241,10 +242,21 @@ export const RulesEngine = {
         if (!isWorkDay) {
           isRestDay = true;
           if (hasRealPunch) {
-            if (dayOvertimeRecords.length > 0) {
+            // 加班起算：加班单或打卡跨度达到起算时间才算加班/疑似加班
+            const otMin = (config.overtimeThreshold != null && config.overtimeThreshold >= 0) ? config.overtimeThreshold : 0;
+            const hasQualifiedOt = dayOvertimeRecords.some(o => (o.overtimeHours || 0) * 60 >= otMin);
+            if (hasQualifiedOt) {
               status = 'overtime';
             } else {
-              status = 'suspect_ot';
+              let spanMin = 0;
+              if (firstSignIn && lastSignOut) {
+                spanMin = (this._timeToMinutes(lastSignOut) || 0) - (this._timeToMinutes(firstSignIn) || 0);
+              }
+              if (spanMin >= otMin) {
+                status = 'suspect_ot';
+              } else {
+                status = 'rest';
+              }
             }
           } else {
             status = 'rest';
@@ -252,7 +264,10 @@ export const RulesEngine = {
         }
 
         for (const o of dayOvertimeRecords) {
-          adjustedOvertime += o.overtimeHours || 0;
+          const otMin = (config.overtimeThreshold != null && config.overtimeThreshold >= 0) ? config.overtimeThreshold : 0;
+          if ((o.overtimeHours || 0) * 60 >= otMin) {
+            adjustedOvertime += o.overtimeHours || 0;
+          }
         }
 
         if (leaveRecord) {
@@ -380,11 +395,12 @@ export const RulesEngine = {
       }
 
       let monthTotalOvertime = 0;
+      const otMin = (config.overtimeThreshold != null && config.overtimeThreshold >= 0) ? config.overtimeThreshold : 0;
       const empResults = results.filter(r => r.employeeNo === employeeNo);
       for (const r of empResults) {
         for (const oid of (r.sourceOvertimeIds || [])) {
           const rec = overtimeRecords.find(o => o.id === oid);
-          if (rec) monthTotalOvertime += rec.overtimeHours || 0;
+          if (rec && (rec.overtimeHours || 0) * 60 >= otMin) monthTotalOvertime += rec.overtimeHours || 0;
         }
       }
 

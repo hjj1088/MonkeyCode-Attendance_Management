@@ -67,6 +67,7 @@ def handle_rules_config_get(handler):
         'workEndTime': cfg.get('workEndTime', '17:30'),
         'lateThreshold': cfg.get('lateThreshold', 0),
         'earlyThreshold': cfg.get('earlyThreshold', 0),
+        'overtimeThreshold': cfg.get('overtimeThreshold', 30),
     })
 
 
@@ -80,7 +81,7 @@ def handle_rules_config_put(handler):
         return
     conn = get_db()
     cfg = _get_config(conn)
-    for key in ('workStartTime', 'workEndTime', 'lateThreshold', 'earlyThreshold'):
+    for key in ('workStartTime', 'workEndTime', 'lateThreshold', 'earlyThreshold', 'overtimeThreshold'):
         if key in body:
             cfg[key] = body[key]
     _set_config(conn, cfg)

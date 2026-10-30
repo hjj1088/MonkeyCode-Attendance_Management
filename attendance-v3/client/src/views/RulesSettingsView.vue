@@ -31,6 +31,10 @@
           <label class="form-label">早退阈值 (分钟)</label>
           <input v-model.number="config.earlyThreshold" type="number" min="0" class="form-input">
         </div>
+        <div class="form-group">
+          <label class="form-label">加班起算 (分钟)</label>
+          <input v-model.number="config.overtimeThreshold" type="number" min="0" class="form-input">
+        </div>
       </div>
     </div>
 
@@ -121,7 +125,7 @@ import Excel from '../shared/excel';
 
 const tab = ref('time');
 const saved = ref(false);
-const config = ref({ workStartTime: '08:30', workEndTime: '17:30', lateThreshold: 0, earlyThreshold: 0, graceTimes: 2, graceMinutes: 30 });
+const config = ref({ workStartTime: '08:30', workEndTime: '17:30', lateThreshold: 0, earlyThreshold: 0, graceTimes: 2, graceMinutes: 30, overtimeThreshold: 30 });
 const holidays = ref([]);
 const newHoliday = ref({ startDate: '', endDate: '', name: '', type: 'holiday' });
 const fieldType = ref('leave');
@@ -227,7 +231,7 @@ async function touchConfigUpdatedAt() {
 
 async function saveTime() {
   const cur = await apiRequest('/rules/config');
-  const changed = ['workStartTime', 'workEndTime', 'lateThreshold', 'earlyThreshold']
+  const changed = ['workStartTime', 'workEndTime', 'lateThreshold', 'earlyThreshold', 'overtimeThreshold']
     .some(k => String(cur[k] ?? '') !== String(config.value[k] ?? ''));
   await apiRequest('/rules/config', {
     method: 'PUT',
@@ -236,6 +240,7 @@ async function saveTime() {
       workEndTime: config.value.workEndTime,
       lateThreshold: config.value.lateThreshold,
       earlyThreshold: config.value.earlyThreshold,
+      overtimeThreshold: config.value.overtimeThreshold,
     }),
   });
   if (changed) await touchConfigUpdatedAt();

@@ -42,7 +42,7 @@ const error = ref('');
 const loading = ref(false);
 const usernameInput = ref(null);
 const passwordInput = ref(null);
-const versionLabel = ref('V3.3.7 考勤管理系统');
+const versionLabel = ref('V3.3.8 考勤管理系统');
 
 onMounted(async () => {
   await nextTick();
