@@ -304,7 +304,7 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 
 | Store 方法 | HTTP 端点 | 说明 |
 |-----------|-----------|------|
-| `Store.getAll(table)` | `GET /api/store/{table}` | 获取全表；可选 `?index=&value=` 过滤 |
+| `Store.getAll(table)` | `GET /api/store/{table}` | 获取全表；可选 `?index=&value=` 过滤、`?limit=N` 限制返回条数（v3.3.3，导出中心预览用） |
 | `Store.getByIndex(table, idx, val)` | `GET /api/store/{table}?index=&value=` | 按单列索引查询 |
 | `Store.getByRange(table, idx, lower, upper)` | `GET /api/store/{table}/range?index=&lower=&upper=` | 按索引范围查询 |
 | `Store.getByKey(table, key)` | `GET /api/store/{table}/{key}` | 按主键查询（settings 按 key，其余按 id） |
@@ -414,7 +414,7 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 | `/api/rules/holidays` | GET/POST/DELETE | 假期管理 | hradmin/superadmin |
 | `/api/rules/work-schedule` | GET | 排班信息 | hradmin/superadmin |
 
-`rules` 配置统一存 `settings.attendance_config` 单键（camelCase：workStartTime/workEndTime/lateThreshold/earlyThreshold/graceTimes/graceMinutes），与 V3.1 前端契约一致。
+`rules` 配置统一存 `settings.attendance_config` 单键（camelCase：workStartTime/workEndTime/lateThreshold/earlyThreshold/graceTimes/graceMinutes/overtimeThreshold），与 V3.1 前端契约一致。`overtimeThreshold`（加班起算，分钟，默认 30）为 v3.3.8 新增。
 
 ## 考勤 API（V3.2）
 
@@ -429,6 +429,7 @@ JWT 采用 HS256 签名，有效期 24 小时。默认账号 `admin` / `admin123
 | `/api/attendance/dept/submit` | PATCH | `{month}`（hradmin/superadmin 提交全部，deptadmin 提交本部门） | deptadmin/hradmin/superadmin |
 | `/api/attendance/lock` | PATCH | `{month}`（要求该月全部 submitted） | hradmin/superadmin |
 | `/api/attendance/leaves` `/travels` `/misses` `/overtime` `/data-month` | GET | 各类 OA 数据 | 登录 |
+| `/api/attendance/months` | GET | 已计算月份去重列表（`SELECT DISTINCT month`，DESC；v3.3.3 导出中心轻量加载用） | 登录 |
 
 `handle_attendance_calculate` 行为：删除该 `month` 旧结果 → 批量插入 `results`（含 review 三字段）→ 写入 `carry_over`。
 

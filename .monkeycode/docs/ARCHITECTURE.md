@@ -543,11 +543,13 @@ pending_review ──确认──► confirmed ──部门/人事提交──�
 
 空结果提示（`AttendanceView.vue`）：
 
-- `configChanged`：仅当本月**已有计算结果**且 `config_updated_at` 新于 `last_calc_<month>`，或 `rules_version` ≠ `RULES_VERSION`（当前 `1.0.30`）时亮「规则已变更」。
+- `configChanged`：仅当本月**已有计算结果**且 `config_updated_at` 新于 `last_calc_<month>`，或 `rules_version` ≠ `RULES_VERSION`（当前 `1.0.35`）时亮「规则已变更」。
 - `noResults`：无结果但该月有打卡 → 「尚未计算」。空表不写「请先导入」。
 - `tableEmptyHint`：`noResults` 时传空串，隐藏表格内第二道提示，避免双红条。
 
 分页：考勤页与用户管理页固定 7 槽、按钮等宽、状态文案 `N / M`。
+
+日历视图与列表联动（v3.3.7）：日历员工下拉与列表共用考勤号排序；选中项同步到**当前页第一行**员工——翻页/改过滤/搜索时日历自动跟随，日历内下拉与左右箭头仍可手动切换。
 
 ## 与 v3.1 的主要变更
 
@@ -581,7 +583,7 @@ pending_review ──确认──► confirmed ──部门/人事提交──�
 
 ## V3.2 已知情况（如实记录）
 
-1. **计算在前端**：考勤判定逻辑位于 `client/src/shared/rules.js`，后端 `/api/attendance/calculate` 仅存储。测试通过 esbuild bundle 在 Node 中驱动。`RULES_VERSION = '1.0.28'`。
+1. **计算在前端**：考勤判定逻辑位于 `client/src/shared/rules.js`，后端 `/api/attendance/calculate` 仅存储。测试通过 esbuild bundle 在 Node 中驱动。`RULES_VERSION = '1.0.35'`。
 2. **登录入口**：主入口为 SPA `/login`（Vite 8002 或 8001 dist）。`client/login.html` 已删除。旧 `attendance.html` 仍在 `client/`，刷新 `/attendance` 时 Vite 必须走 SPA 回退，否则会出旧侧栏页。
 3. **静态托管（server.py）**：8001 `/` `/index.html` 服务 `client/dist`；`/assets/*` `/lib/*` 从 dist 读；无扩展名路径回退 `dist/index.html`。旧 HTML 仅显式路径可达。
 4. **登录锁定**：连错 5 次写 `locked_until`（+1 天）；距 `last_failed_login` 超过 1 天由 `clear_stale_attempts` 清零计数。
