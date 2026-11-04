@@ -103,3 +103,16 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 打版本 tag（vX.Y.Z）时必须同步：`APP_VERSION`、`client/package.json` + `package-lock.json`、`AppSidebar.vue`/`SettingsView.vue` 的接口失败回退默认值；`version_name` 只写主版本段（如 'V3.3'），patch 由前端拼接
   - tag 需指向含版本号修正的提交：`git tag -f vX.Y.Z && git push -f origin vX.Y.Z`（tag 刚推无消费者时可强推）
   - push main 即触发 GHCR 双镜像构建（V2 + V3），tag 额外产出 semver 标签；沙箱无 docker daemon，无需本地构建
+
+[Gitee 镜像同步流程]
+- Date: 2026-11-04
+- Context: Agent 同步 GitHub 与 Gitee 仓库时发现（凭据失效、浅克隆、历史分叉三连问题）
+- Category: 运维部署
+- Instructions:
+  - Gitee 远程已配置：`gitee → https://gitee.com/hjj1088/MonkeyCode-Attendance_Management.git`（与 GitHub 互为镜像）
+  - agent credential helper（`/app/agent/bin/agent git-credential-helper`）只读且存的 Gitee token 已失效（401），`git credential approve` 无法覆盖；Gitee 推送需用户提供私人访问令牌
+  - 推 Gitee 的命令模式（重置 helper 后挂临时 helper，token 走环境变量）：
+    `export GT=<用户提供的令牌>` 然后
+    `git -c credential.helper= -c credential.helper='!f() { echo username=hjj1088; echo password=$GT; }; f' push gitee main --force`
+  - 开发沙箱仓库可能是浅克隆（`.git/shallow` 存在时 push 被拒 `shallow update not allowed`），先 `git fetch origin --unshallow` 补全历史再推
+  - 2026-11-04 已将 Gitee main 从无关的 v3.2 旧历史线强推为本地主线（旧线备份在本地分支 `backup/gitee-main-v32`，确认无用后可删）；Gitee 无 CI，仅作镜像
