@@ -42,7 +42,7 @@ defineEmits(['navigate']);
 
 const route = useRoute();
 const router = useRouter();
-const versionText = ref('V3.3.8');
+const versionText = ref('V3.3.9');
 
 onMounted(async () => {
   try {
@@ -65,7 +65,7 @@ const ICONS = {
 const ALL_NAV = [
   { to: '/import', label: '数据导入', icon: ICONS.upload, roles: ['superadmin', 'hradmin'] },
   { to: '/attendance', label: '考勤计算', icon: ICONS.clock, roles: ['superadmin', 'hradmin', 'deptadmin'] },
-  { to: '/my', label: '我的考勤', icon: ICONS.user, roles: ['superadmin', 'employee', 'deptadmin'] },
+  { to: '/my', label: '我的考勤', icon: ICONS.user, roles: ['superadmin', 'hradmin', 'employee', 'deptadmin'] },
   { to: '/export', label: '导出中心', icon: ICONS.download, roles: ['superadmin', 'hradmin'] },
   { to: '/users', label: '用户管理', icon: ICONS.users, roles: ['superadmin', 'hradmin'] },
   { to: '/settings/rules', label: '考勤规则', icon: ICONS.shield, roles: ['superadmin', 'hradmin'] },

@@ -19,7 +19,7 @@ const routes = [
     path: '/my',
     name: 'my',
     component: () => import('../views/MyAttendanceView.vue'),
-    meta: { roles: ['superadmin', 'deptadmin', 'employee'], title: '我的考勤' },
+    meta: { roles: ['superadmin', 'hradmin', 'deptadmin', 'employee'], title: '我的考勤' },
   },
   {
     path: '/import',
